@@ -302,7 +302,7 @@ class ControlPanel:
         self.sim_speed_slider = pygame_gui.elements.UIHorizontalSlider(
             relative_rect=pygame.Rect((panel_x, y), (280, 30)),
             start_value=1.0,
-            value_range=(0.2, 3.0),
+            value_range=(0.2, 100.0),
             manager=self.ui_manager,
         )
         y += 70
