@@ -24,6 +24,7 @@ class App:
         self.sim = ThemeParkSim()
         self.simulation_speed = 1.0
         self.tooltip_node: Optional[str] = None
+        self.hovered_agent = None   ### UPDATED ###
         self.mouse_pos: Tuple[int, int] = (0, 0)
 
         self.ui_manager = pygame_gui.UIManager((WIDTH, HEIGHT))
@@ -75,18 +76,28 @@ class App:
         self.sim.step(dt * self.simulation_speed)
 
         self.mouse_pos = pygame.mouse.get_pos()
+        ### UPDATED ### detect node or agent hover
         if self.mouse_pos[0] < SIM_W:
             self.tooltip_node = self.sim.node_at_position(self.mouse_pos)
+            if self.tooltip_node is None:
+                self.hovered_agent = self.sim.agent_at_position(self.mouse_pos)
+            else:
+                self.hovered_agent = None
         else:
             self.tooltip_node = None
+            self.hovered_agent = None
 
+        ### UPDATED ### update info label based on hover
         if self.tooltip_node is not None:
             self.control_panel.info_label.set_text(self.sim.hovered_info(self.tooltip_node).replace("\n", " | "))
+        elif self.hovered_agent is not None:
+            self.control_panel.info_label.set_text(self.sim.agent_hovered_info(self.hovered_agent).replace("\n", " | "))
         else:
-            self.control_panel.info_label.set_text("Hover a ride to see info")
+            self.control_panel.info_label.set_text("Hover a ride or agent to see info")
 
     def draw(self) -> None:
-        self.view.draw(self.sim, self.simulation_speed, self.tooltip_node, self.mouse_pos)
+        ### UPDATED ### pass hovered_agent to view
+        self.view.draw(self.sim, self.simulation_speed, self.tooltip_node, self.mouse_pos, self.hovered_agent)
         self.ui_manager.draw_ui(self.screen)
         pygame.display.flip()
 

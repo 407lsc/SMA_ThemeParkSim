@@ -11,7 +11,8 @@ NodeId = str
 AgentId = int
 RGBColor = Tuple[int, int, int]
 Path = List[NodeId]
-AgentState = Literal["stationary", "moving", "queuing", "on_ride"]
+### UPDATED ### added "exited" to AgentState
+AgentState = Literal["stationary", "moving", "queuing", "on_ride", "exited"]
 
 
 class AgentRuntime(Protocol):
@@ -33,6 +34,15 @@ class AgentRuntime(Protocol):
         ...
 
     def refresh_agent_position(self, agent: "Agent") -> None:
+        ...
+
+    ### UPDATED ### new methods for time limit feature
+    def current_time(self) -> float:
+        """Return current simulation time in seconds."""
+        ...
+
+    def shortest_path(self, start: NodeId, end: NodeId) -> Path:
+        """Return shortest path between two nodes."""
         ...
 
 
@@ -137,10 +147,6 @@ class Ride(NodeData):
 
     def process_queues(self, current_time_step: int) -> None:
         """Advance this ride's queue process (pending implementation)."""
-        # _ = current_time_step
-        # to be implemented: logic to move agents from queues to "on_ride" state and set _next_completion_step
-        # return
-
         _ = current_time_step
 
         # Proof of concept: randomly release one agent from a random non-empty queue.
@@ -165,12 +171,6 @@ class Ride(NodeData):
             return False
         self._released_agent_ids.remove(agent_id)
         return True
-
-    #Need to add discrete event simulation code here
-
-# Feel free to inherit from or modify the above Ride class to implement different ride behaviors.
-class MyRide(Ride):
-    pass
 
 
 class EdgeData:
@@ -202,8 +202,6 @@ class EdgeData:
         if self.length <= 0:
             return 0.0
         return float(live_agents) / self.length
-    
-    # Feel free to define additional methods or properties
 
 
 class Agent:
@@ -225,6 +223,9 @@ class Agent:
         pos: Vec2 = (0.0, 0.0),
         completed_loops: int = 0,
         previous_destinations: Optional[List[NodeId]] = None,
+        ### UPDATED ### new parameters for stay duration
+        stay_end_time: float = float('inf'),
+        pending_leave: bool = False,
     ) -> None:
         self.agent_id = agent_id
         self.speed = speed
@@ -243,6 +244,10 @@ class Agent:
 
         self.has_arrived = False
         self._occupied_edge: Optional[EdgeKey] = None
+
+        ### UPDATED ###
+        self.stay_end_time = stay_end_time
+        self.pending_leave = pending_leave
 
     def _leave_current_edge(self, runtime: AgentRuntime) -> None:
         if self._occupied_edge is None:
@@ -280,25 +285,40 @@ class Agent:
         self.current_index = 0
         self.progress = 0.0
 
+    ### UPDATED ### helper to check if time is up
+    def is_time_to_leave(self, current_time: float) -> bool:
+        return current_time >= self.stay_end_time
+
     def execute_step(self, dt: float, runtime: AgentRuntime) -> None:
         """Execute one simulation tick using behavior specific to current state."""
+        # First, handle state-specific behavior
         if self.state == "stationary":
             self._execute_stationary(runtime)
-            return
-        if self.state == "queuing":
+        elif self.state == "queuing":
             self._execute_queuing(runtime)
-            return
-        if self.state == "on_ride":
+        elif self.state == "on_ride":
             self._execute_on_ride(runtime)
-            return
-        self._execute_moving(dt, runtime)
+        elif self.state != "exited":
+            self._execute_moving(dt, runtime)
+
+        ### UPDATED ### after state update, check if time expired
+        if not self.pending_leave and self.is_time_to_leave(runtime.current_time()):
+            self.pending_leave = True
 
     def _execute_stationary(self, runtime: AgentRuntime) -> None:
         """Stationary agents choose a new route and start moving."""
         self._leave_current_edge(runtime)
 
         start = self._current_node_id()
-        self.replan_path(runtime.random_path(start))
+        ### UPDATED ### if pending leave, go to entrance
+        if self.pending_leave:
+            try:
+                new_path = runtime.shortest_path(start, "entrance")
+            except Exception:
+                new_path = [start, "entrance"]
+            self.replan_path(new_path)
+        else:
+            self.replan_path(runtime.random_path(start))
         self.state = "moving"
         runtime.refresh_agent_position(self)
 
@@ -311,7 +331,15 @@ class Agent:
             self._leave_current_edge(runtime)
             self.completed_loops += 1
             start = self._current_node_id()
-            self.replan_path(runtime.random_path(start))
+            ### UPDATED ### if pending leave, go to entrance
+            if self.pending_leave:
+                try:
+                    new_path = runtime.shortest_path(start, "entrance")
+                except Exception:
+                    new_path = [start, "entrance"]
+                self.replan_path(new_path)
+            else:
+                self.replan_path(runtime.random_path(start))
             runtime.refresh_agent_position(self)
             return
 
@@ -331,6 +359,13 @@ class Agent:
 
             arrived = self.path[self.current_index]
             node = runtime.node_data_for(arrived)
+
+            ### UPDATED ### if arrived at entrance while pending leave, mark as exited
+            if arrived == "entrance" and self.pending_leave:
+                self.state = "exited"
+                runtime.refresh_agent_position(self)
+                return
+
             if isinstance(node, Ride):
                 self.previous_destinations.append(arrived)
                 should_queue = node.join_queue(self.agent_id, queue_type="normal")
@@ -355,19 +390,31 @@ class Agent:
 
         if node.is_released_from_queue(self.agent_id):
             start = self._current_node_id()
-            self.replan_path(runtime.random_path(start))
+            ### UPDATED ### if pending leave, go to entrance
+            if self.pending_leave:
+                try:
+                    new_path = runtime.shortest_path(start, "entrance")
+                except Exception:
+                    new_path = [start, "entrance"]
+                self.replan_path(new_path)
+            else:
+                self.replan_path(runtime.random_path(start))
             self.state = "moving"
 
         runtime.refresh_agent_position(self)
 
     def _execute_on_ride(self, runtime: AgentRuntime) -> None:
-        """Placeholder ride state; currently transitions to stationary next tick."""
+        """Placeholder ride state; after ride finishes, decide next move."""
         self._leave_current_edge(runtime)
-        self.state = "stationary"
+        start = self._current_node_id()
+        ### UPDATED ### if pending leave, go to entrance
+        if self.pending_leave:
+            try:
+                new_path = runtime.shortest_path(start, "entrance")
+            except Exception:
+                new_path = [start, "entrance"]
+            self.replan_path(new_path)
+            self.state = "moving"
+        else:
+            self.state = "stationary"  # will choose a random ride next
         runtime.refresh_agent_position(self)
-
-
-# Feel free to inherit from or modify the above Agent class to implement different visitor behaviors.
-
-class MyAgent(Agent):
-    pass

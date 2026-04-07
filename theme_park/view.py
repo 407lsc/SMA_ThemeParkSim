@@ -20,7 +20,7 @@ from .config import (
     SIM_W,
     TEXT_COLOR,
 )
-from .models import Ride
+from .models import Agent, Ride   ### UPDATED ### import Agent
 from .simulation import ThemeParkSim
 
 
@@ -157,12 +157,14 @@ class ParkView:
                     pygame.draw.circle(dot_surface, (255, 255, 255, alpha), (dot_radius, dot_radius), dot_radius, 1)
                     self.screen.blit(dot_surface, (center_x - dot_radius, center_y - dot_radius))
 
+    ### UPDATED ### draw method now accepts hovered_agent
     def draw(
         self,
         sim: ThemeParkSim,
         simulation_speed: float,
         tooltip_node: Optional[str],
         mouse_pos: Tuple[int, int],
+        hovered_agent: Optional[Agent] = None,
     ) -> None:
         """Draw the full frame: map, nodes, agents, tooltip, and sidebar stats."""
         self.screen.fill(BG)
@@ -215,8 +217,22 @@ class ParkView:
             pygame.draw.rect(self.screen, HOVER_BORDER, pygame.Rect(box_x, box_y, box_w, box_h), 1, border_radius=6)
             draw_multiline(self.screen, sim.hovered_info(tooltip_node), (box_x + 10, box_y + 10), self.small_font)
 
+        ### UPDATED ### draw tooltip for agent if hovered
+        if hovered_agent is not None:
+            mouse_x, mouse_y = pygame.mouse.get_pos()
+            info_text = sim.agent_hovered_info(hovered_agent)
+            lines = info_text.splitlines()
+            max_width = max(self.small_font.size(line)[0] for line in lines) + 20
+            box_h = len(lines) * 22 + 10
+            box_x = min(mouse_x + 15, SIM_W - max_width - 10)
+            box_y = min(mouse_y + 15, HEIGHT - box_h - 10)
+            pygame.draw.rect(self.screen, HOVER_PANEL_BG, pygame.Rect(box_x, box_y, max_width, box_h), border_radius=6)
+            pygame.draw.rect(self.screen, HOVER_BORDER, pygame.Rect(box_x, box_y, max_width, box_h), 1, border_radius=6)
+            draw_multiline(self.screen, info_text, (box_x + 10, box_y + 8), self.small_font)
+
         hud_lines = [
             f"Agents: {len(sim.agents)}",
+            f"Exited: {sim.exited_agent_count}",   # new line
             f"Agent speed: {DEFAULT_AGENT_SPEED:.0f}",
             f"Sim speed: {simulation_speed:.1f}x",
             f"Current step: {sim.current_time_step}",
@@ -287,7 +303,7 @@ class ControlPanel:
 
         self.info_label = pygame_gui.elements.UILabel(
             relative_rect=pygame.Rect((panel_x, y), (280, 22)),
-            text="Hover a ride to see info",
+            text="Hover a ride or agent to see info",
             manager=self.ui_manager,
         )
 

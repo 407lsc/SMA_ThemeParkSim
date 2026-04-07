@@ -9,14 +9,6 @@ import networkx as nx
 from .config import DEFAULT_AGENT_COLOR, DEFAULT_AGENT_SPEED
 from .models import Agent, EdgeData, EdgeKey, NodeData, Ride, Vec2
 
-# TO DO (leave it here for now)
-# - pictures for the rides (DONE!)
-# - visualise queue length at rides (DONE)
-# - continuous entrance to the park (add time step for simulation model) (done)
-# - define previous ride to be easily accessible (done)
-# - time remaining for each agent (skipped)
-# - add simpy DES
-
 
 class ThemeParkSim:
     def __init__(self, agent_count: int = 15) -> None:
@@ -29,28 +21,43 @@ class ThemeParkSim:
         self.elapsed_sim_time: float = 0.0
 
         self.agent_count = agent_count
+        self.exited_agent_count = 0
 
         self.initialise()
+
+    
+    
+    ### UPDATED ### find agent near mouse position
+    def agent_at_position(self, mouse_pos: Tuple[int, int], radius: int = 8) -> Optional[Agent]:
+        mx, my = mouse_pos
+        for agent in self.agents:
+            if agent.state not in ("queuing", "on_ride"):  # only moving/stationary agents are drawn with circles
+                ax, ay = agent.pos
+                if (mx - ax) ** 2 + (my - ay) ** 2 <= radius ** 2:
+                    return agent
+        return None
+    
+    ### UPDATED ### get agent info for tooltip
+    def agent_hovered_info(self, agent: Agent) -> str:
+        remaining = max(0.0, agent.stay_end_time - self.elapsed_sim_time)
+        hours = int(remaining // 3600)
+        minutes = int((remaining % 3600) // 60)
+        return f"Agent {agent.agent_id}\nTime left: {hours}h {minutes}m"
 
     # computed property
     @property
     def rides(self) -> List[str]:
         return [node for node, meta in self.node_data.items() if isinstance(meta, Ride)]
 
-
     # Functions
 
     """Add code here to run once at the start of the simulation or upon reset, for example to build the park graph and spawn initial agents."""
     def initialise(self) -> None:
         self._build_park()
-        #self._spawn_initial_agents(self.agent_count)
+        # self._spawn_initial_agents(self.agent_count)   ### ORIGINAL: no initial agents
 
     def execute_step(self, dt: float) -> None:
-        """Per-step simulation hook for custom time-based behavior.
-
-        Add your own simulation-level logic here (for example, continuous
-        park entry every N steps) using self.current_time_step and dt.
-        """
+        """Per-step simulation hook for custom time-based behavior."""
         _ = dt
 
         for meta in self.node_data.values():
@@ -61,6 +68,7 @@ class ThemeParkSim:
         if random.random() > 0.95:
             self.add_agent()
 
+    ### UPDATED ### added stay_end_time assignment
     def add_agent(self) -> Agent:
         """Spawn one agent and append it to the active agent list."""
         agent_id = len(self.agents)
@@ -74,15 +82,21 @@ class ThemeParkSim:
             random.randint(30, 240),
             random.randint(30, 240),
         )
+
+        ### UPDATED ### random stay duration between 1 and 11 hours (converted to seconds)
+        stay_hours = random.uniform(1.0, 11.0)
+        stay_end_time = self.elapsed_sim_time + stay_hours * 3600.0
+
         agent = Agent(
             agent_id=agent_id,
             speed=DEFAULT_AGENT_SPEED,
-            # color=DEFAULT_AGENT_COLOR,
             color=random_color,
             path=path,
             current_index=0,
             progress=0.0,
             pos=pos,
+            stay_end_time=stay_end_time,
+            pending_leave=False,
         )
         self.agents.append(agent)
         self.refresh_agent_position(agent)
@@ -159,6 +173,7 @@ class ThemeParkSim:
     # - leave_edge
     # - edge_length
     # - node_data_for
+    ### UPDATED ### also current_time and shortest_path
     def random_path(self, start: str) -> List[str]:
         # Provide route planning for agent decisions/replanning.
         rides = self.rides
@@ -169,6 +184,14 @@ class ThemeParkSim:
             return nx.shortest_path(self.graph, start, target, weight="length")
         except nx.NetworkXNoPath:
             return [start]
+
+    ### UPDATED ### new method for shortest path queries
+    def shortest_path(self, start: str, end: str) -> List[str]:
+        return nx.shortest_path(self.graph, start, end, weight="length")
+
+    ### UPDATED ### new method to return current simulation time
+    def current_time(self) -> float:
+        return self.elapsed_sim_time
 
     def _spawn_initial_agents(self, count: int) -> None:
         for i in range(count):
@@ -226,14 +249,27 @@ class ThemeParkSim:
 
     # Other public methods consumed by the view or for internal logic:
 
+
+    ### UPDATED ###
+    def get_exited_agent_count(self) -> int:
+        return self.exited_agent_count
+
+    ### UPDATED ### step() now removes exited agents and counts them
     def step(self, dt: float) -> None:
         self.current_time_step += 1
         self.elapsed_sim_time += dt
         self.execute_step(dt)
 
-        # Iterate over a copy in case a time-step handler adds/removes agents.
-        for agent in list(self.agents):
+        agents_to_remove = []
+        for agent in self.agents:
             agent.execute_step(dt, self)
+            if agent.state == "exited":
+                agents_to_remove.append(agent)
+
+        for agent in agents_to_remove:
+            self.agents.remove(agent)
+            self.exited_agent_count += 1   ### UPDATED ###
+            self.agent_count = len(self.agents)
 
     def node_at_position(self, mouse_pos: Tuple[int, int], radius: int = 18) -> Optional[str]:
         mx, my = mouse_pos
@@ -249,5 +285,3 @@ class ThemeParkSim:
             lines.append(f"Capacity: {meta.capacity}")
             lines.append(f"Queue: {meta.total_queue_len}")
         return "\n".join(lines)
-
-
