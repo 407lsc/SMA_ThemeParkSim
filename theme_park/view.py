@@ -20,7 +20,7 @@ from .config import (
     SIM_W,
     TEXT_COLOR,
 )
-from .models import Agent, Ride   ### UPDATED ### import Agent
+from .models import Agent, Ride
 from .simulation import ThemeParkSim
 
 
@@ -51,10 +51,7 @@ def draw_multiline(
 
 
 class ParkView:
-    """Render the simulation scene and HUD elements onto the pygame screen."""
-
     def __init__(self, screen: pygame.Surface, font: pygame.font.Font, small_font: pygame.font.Font) -> None:
-        """Store drawing surfaces and fonts used by the view layer."""
         self.screen = screen
         self.font = font
         self.small_font = small_font
@@ -90,7 +87,6 @@ class ParkView:
         return {agent.agent_id: agent.color for agent in sim.agents}
 
     def _draw_ride_queues(self, sim: ThemeParkSim) -> None:
-        """Draw S/N/F queue rows centered beneath each ride marker."""
         agent_colors = self._agent_color_map(sim)
         queue_rows = [
             ("S", "single_rider", (55, 55, 55)),
@@ -157,7 +153,6 @@ class ParkView:
                     pygame.draw.circle(dot_surface, (255, 255, 255, alpha), (dot_radius, dot_radius), dot_radius, 1)
                     self.screen.blit(dot_surface, (center_x - dot_radius, center_y - dot_radius))
 
-    ### UPDATED ### draw method now accepts hovered_agent
     def draw(
         self,
         sim: ThemeParkSim,
@@ -166,15 +161,16 @@ class ParkView:
         mouse_pos: Tuple[int, int],
         hovered_agent: Optional[Agent] = None,
     ) -> None:
-        """Draw the full frame: map, nodes, agents, tooltip, and sidebar stats."""
         self.screen.fill(BG)
         pygame.draw.rect(self.screen, PANEL_BG, pygame.Rect(SIM_W, 0, PANEL_W, HEIGHT))
 
+        # Draw edges
         for u, v in sim.graph.edges():
             x1, y1 = sim.positions[u]
             x2, y2 = sim.positions[v]
             pygame.draw.line(self.screen, EDGE_COLOR, (x1, y1), (x2, y2), 2)
 
+        # Draw nodes
         for node_id, (x, y) in sim.positions.items():
             meta = sim.node_data[node_id]
             base_radius = 16 if meta.kind == "ride" else 10
@@ -193,21 +189,29 @@ class ParkView:
             if not used_image:
                 pygame.draw.circle(self.screen, color, (int(x), int(y)), radius)
 
-            # Keep a border around both image and circle markers for consistency.
             pygame.draw.circle(self.screen, (255, 255, 255), (int(x), int(y)), radius, 2)
 
             label = meta.name
             label_surface = self.small_font.render(label, True, (30, 30, 30))
             self.screen.blit(label_surface, (x - label_surface.get_width() // 2, y - radius - 22))
 
+        # Draw park time at top-left of simulation area
+        ### FIX ### park time at top-right of simulation area
+        park_time_str = sim.get_park_time_str()
+        time_surface_right = self.font.render(f"Park Time: {park_time_str}", True, TEXT_COLOR)
+        right_x = SIM_W - time_surface_right.get_width() - 10
+        self.screen.blit(time_surface_right, (right_x, 10))
+
         self._draw_ride_queues(sim)
 
+        # Draw agents (except those queuing/on ride)
         for agent in sim.agents:
             if agent.state in ("queuing", "on_ride"):
                 continue
             x, y = agent.pos
             pygame.draw.circle(self.screen, agent.color, (int(x), int(y)), 5)
 
+        # Ride tooltip
         if tooltip_node is not None and sim.node_data[tooltip_node].kind == "ride":
             mouse_x, mouse_y = pygame.mouse.get_pos()
             box_w, box_h = 220, 90
@@ -217,7 +221,7 @@ class ParkView:
             pygame.draw.rect(self.screen, HOVER_BORDER, pygame.Rect(box_x, box_y, box_w, box_h), 1, border_radius=6)
             draw_multiline(self.screen, sim.hovered_info(tooltip_node), (box_x + 10, box_y + 10), self.small_font)
 
-        ### UPDATED ### draw tooltip for agent if hovered
+        # Agent tooltip
         if hovered_agent is not None:
             mouse_x, mouse_y = pygame.mouse.get_pos()
             info_text = sim.agent_hovered_info(hovered_agent)
@@ -230,13 +234,29 @@ class ParkView:
             pygame.draw.rect(self.screen, HOVER_BORDER, pygame.Rect(box_x, box_y, max_width, box_h), 1, border_radius=6)
             draw_multiline(self.screen, info_text, (box_x + 10, box_y + 8), self.small_font)
 
+        # Park closed overlay
+        if sim.park_closed or sim.waiting_for_exit:
+            font_large = pygame.font.Font(None, 48)
+            closed_text = font_large.render("PARK CLOSED", True, (200, 0, 0))
+            text_rect = closed_text.get_rect(center=(SIM_W//2, HEIGHT//2))
+            # Semi-transparent background
+            s = pygame.Surface((SIM_W, HEIGHT), pygame.SRCALPHA)
+            s.fill((0, 0, 0, 128))
+            self.screen.blit(s, (0, 0))
+            self.screen.blit(closed_text, text_rect)
+
+        # Sidebar HUD
+        total_sec = int(sim.elapsed_sim_time)
+        sim_h = total_sec // 3600
+        sim_m = (total_sec % 3600) // 60
+        sim_s = total_sec % 60
         hud_lines = [
             f"Agents: {len(sim.agents)}",
-            f"Exited: {sim.exited_agent_count}",   # new line
+            f"Exited: {sim.get_exited_agent_count()}",
             f"Agent speed: {DEFAULT_AGENT_SPEED:.0f}",
             f"Sim speed: {simulation_speed:.1f}x",
             f"Current step: {sim.current_time_step}",
-            f"Sim time: {sim.elapsed_sim_time:.1f}s",
+            f"Sim time: {sim_h:02d}:{sim_m:02d}:{sim_s:02d}",
             f"Cursor: ({mouse_pos[0]}, {mouse_pos[1]})",
         ]
         line_height = 24
@@ -246,10 +266,7 @@ class ParkView:
 
 
 class ControlPanel:
-    """Define and manage the pygame_gui control widgets in the sidebar."""
-
     def __init__(self, ui_manager: pygame_gui.UIManager, sim: ThemeParkSim) -> None:
-        """Create sliders, buttons, and labels for simulation controls."""
         self.ui_manager = ui_manager
         panel_x = SIM_W + 15
         y = 20
@@ -275,9 +292,10 @@ class ControlPanel:
         )
         y += 55
 
+        # Simulation speed slider with label
         self.sim_speed_label = pygame_gui.elements.UILabel(
             relative_rect=pygame.Rect((panel_x, y), (280, 22)),
-            text="Simulation speed",
+            text="Simulation speed: 1.0x",
             manager=self.ui_manager,
         )
         y += 25
@@ -289,6 +307,7 @@ class ControlPanel:
         )
         y += 70
 
+        # Reset and Add Agent buttons
         self.reset_button = pygame_gui.elements.UIButton(
             relative_rect=pygame.Rect((panel_x, y), (130, 35)),
             text="Reset",
@@ -301,13 +320,35 @@ class ControlPanel:
         )
         y += 60
 
+        # Info label (hover)
         self.info_label = pygame_gui.elements.UILabel(
             relative_rect=pygame.Rect((panel_x, y), (280, 22)),
             text="Hover a ride or agent to see info",
             manager=self.ui_manager,
         )
+        y += 40
+
+        # Park time slider
+        self.time_slider_label = pygame_gui.elements.UILabel(
+            relative_rect=pygame.Rect((panel_x, y), (280, 22)),
+            text="Park time (hours offset)",
+            manager=self.ui_manager,
+        )
+        y += 25
+        self.time_slider = pygame_gui.elements.UIHorizontalSlider(
+            relative_rect=pygame.Rect((panel_x, y), (280, 30)),
+            start_value=0.0,
+            value_range=(0.0, 11.0),
+            manager=self.ui_manager,
+        )
+        y += 40
+        self.time_value_label = pygame_gui.elements.UILabel(
+            relative_rect=pygame.Rect((panel_x, y), (280, 22)),
+            text="Current time: 10:00:00",
+            manager=self.ui_manager,
+        )
 
     def sync_from_sim(self, sim: ThemeParkSim, simulation_speed: float) -> None:
-        """Sync widget values after simulation reset or model replacement."""
         self.agent_slider.set_current_value(sim.agent_count)
         self.sim_speed_slider.set_current_value(simulation_speed)
+        self.sim_speed_label.set_text(f"Simulation speed: {simulation_speed:.1f}x")

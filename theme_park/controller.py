@@ -24,7 +24,7 @@ class App:
         self.sim = ThemeParkSim()
         self.simulation_speed = 1.0
         self.tooltip_node: Optional[str] = None
-        self.hovered_agent = None   ### UPDATED ###
+        self.hovered_agent = None
         self.mouse_pos: Tuple[int, int] = (0, 0)
 
         self.ui_manager = pygame_gui.UIManager((WIDTH, HEIGHT))
@@ -38,21 +38,32 @@ class App:
             self.sim = ThemeParkSim(agent_count=agent_count)
         self.control_panel.sync_from_sim(self.sim, 1.0)
         self.simulation_speed = 1.0
+        self.sync_time_slider()
 
     def add_agent(self) -> None:
         self.sim.add_agent()
 
-    """Logic for handling changes to slider parameters"""
     def _handle_slider_event(self, event) -> None:
         if event.ui_element == self.control_panel.agent_slider:
             new_count = int(event.value)
-            if new_count != self.sim.agent_count:
-                self.reset_sim(agent_count=new_count)
+            current_count = len(self.sim.agents)
+            if new_count > current_count:
+                for _ in range(new_count - current_count):
+                    self.sim.add_agent()
+            # Sync slider to actual agent count
+            self.control_panel.agent_slider.set_current_value(len(self.sim.agents))
 
         elif event.ui_element == self.control_panel.sim_speed_slider:
-            self.simulation_speed = float(event.value)
+            new_speed = float(event.value)
+            self.control_panel.sim_speed_label.set_text(f"Simulation speed: {new_speed:.1f}x")
+            self.simulation_speed = new_speed
 
-    """Logic for handling button press events"""
+        elif event.ui_element == self.control_panel.time_slider:
+            offset_hours = float(event.value)
+            self.sim.set_park_time(offset_hours)
+            # Update the label with current park time
+            self.control_panel.time_value_label.set_text(f"Current time: {self.sim.get_park_time_str()}")
+
     def _handle_button_event(self, event) -> None:
         if event.ui_element == self.control_panel.reset_button:
             self.reset_sim()
@@ -71,12 +82,16 @@ class App:
             elif event.type == pygame_gui.UI_BUTTON_PRESSED:
                 self._handle_button_event(event)
 
+    def sync_time_slider(self) -> None:
+        offset = self.sim.get_park_time_seconds() / 3600.0
+        self.control_panel.time_slider.set_current_value(offset)
+        self.control_panel.time_value_label.set_text(f"Current time: {self.sim.get_park_time_str()}")
+
     def update(self, dt: float) -> None:
         self.ui_manager.update(dt)
         self.sim.step(dt * self.simulation_speed)
 
         self.mouse_pos = pygame.mouse.get_pos()
-        ### UPDATED ### detect node or agent hover
         if self.mouse_pos[0] < SIM_W:
             self.tooltip_node = self.sim.node_at_position(self.mouse_pos)
             if self.tooltip_node is None:
@@ -87,7 +102,6 @@ class App:
             self.tooltip_node = None
             self.hovered_agent = None
 
-        ### UPDATED ### update info label based on hover
         if self.tooltip_node is not None:
             self.control_panel.info_label.set_text(self.sim.hovered_info(self.tooltip_node).replace("\n", " | "))
         elif self.hovered_agent is not None:
@@ -95,8 +109,9 @@ class App:
         else:
             self.control_panel.info_label.set_text("Hover a ride or agent to see info")
 
+        self.sync_time_slider()
+
     def draw(self) -> None:
-        ### UPDATED ### pass hovered_agent to view
         self.view.draw(self.sim, self.simulation_speed, self.tooltip_node, self.mouse_pos, self.hovered_agent)
         self.ui_manager.draw_ui(self.screen)
         pygame.display.flip()
