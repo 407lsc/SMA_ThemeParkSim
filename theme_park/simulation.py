@@ -53,7 +53,7 @@ class ThemeParkSim:
         # You can tune these weights if you want a different population mix
         return random.choices(
             ["teenager", "adult", "elderly", "group"],
-            weights=[0.3, 0.5, 0.2],
+            weights=[0.25, 0.40, 0.20, 0.15],
             k=1
         )[0]
 
