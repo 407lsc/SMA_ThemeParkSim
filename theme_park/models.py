@@ -362,8 +362,8 @@ class Agent:
         self.path = path
         self.state = state
 
-        # Safety checks
-        valid_visitor_types = {"teenager", "adult", "elderly"}
+        # Safety checks for visitor & queue types
+        valid_visitor_types = {"teenager", "adult", "elderly", "group"}
         if visitor_type not in valid_visitor_types:
             raise ValueError(
                 f"visitor_type must be one of {valid_visitor_types}, got {visitor_type!r}"
@@ -663,3 +663,30 @@ class ElderlyAgent(Agent):
             planned_departure_time=planned_departure_time,
             **kwargs,
         )
+
+    class GroupAgent(Agent):
+        """Visitors arriving as a group with unique dynamics."""
+
+        def __init__(
+            self,
+            agent_id: int,
+            color: RGBColor,
+            path: Path,
+            group_size: int = 2,
+            queue_type: str = "normal",
+            planned_departure_time: float = 160.0,
+            **kwargs,
+        ) -> None:
+            if group_size < 2:
+                group_size = 2  # enforce minimum
+            super().__init__(
+                agent_id=agent_id,
+                speed=DEFAULT_AGENT_SPEED * 0.95,
+                color=color,
+                path=path,
+                visitor_type="group",
+                group_size=group_size,
+                queue_type=queue_type,
+                planned_departure_time=planned_departure_time,
+                **kwargs,
+            )

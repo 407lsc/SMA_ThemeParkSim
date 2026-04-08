@@ -72,6 +72,8 @@ class ThemeParkSim:
             k=1,
         )[0]
 
+    # Defines if visitor is individual or group
+    ## Called in add_agent() when spawning in a new agent
     def _random_group_size(self) -> int:
         # 70% chance individual, 30% chance group of size 2-7
         if random.random() < 0.7:
@@ -84,8 +86,15 @@ class ThemeParkSim:
         path = self.random_path(start)
         pos = self.positions[start]
 
-        group_size = self._random_group_size()
         visitor_type = self._random_visitor_type()
+
+        # Use your existing group size logic
+        group_size = self._random_group_size()
+
+        # If visitor type is group, enforce group_size >= 2
+        if visitor_type == "group" and group_size == 1:
+            group_size = random.randint(2, 7)
+
         queue_type = self._random_queue_type(group_size)
         planned_departure_time = self._sample_departure_time(visitor_type)
 
@@ -114,6 +123,8 @@ class ThemeParkSim:
             agent = TeenagerAgent(**shared_kwargs)
         elif visitor_type == "elderly":
             agent = ElderlyAgent(**shared_kwargs)
+        elif visitor_type == "group":
+            agent = GroupAgent(**shared_kwargs)
         else:
             agent = AdultAgent(**shared_kwargs)
 
