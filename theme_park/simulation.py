@@ -7,7 +7,7 @@ from typing import Dict, List, Optional, Tuple
 import networkx as nx
 
 from .config import DEFAULT_AGENT_COLOR, DEFAULT_AGENT_SPEED
-from .models import Agent, AdultAgent, ElderlyAgent, TeenagerAgent, EdgeData, EdgeKey, NodeData, Ride, Vec2
+from .models import Agent, AdultAgent, ElderlyAgent, TeenagerAgent, GroupAgent, EdgeData, EdgeKey, NodeData, Ride, Vec2
 
 class ThemeParkSim:
     def __init__(self, agent_count: int = 15) -> None:
