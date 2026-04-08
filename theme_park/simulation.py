@@ -305,6 +305,8 @@ class ThemeParkSim:
             mean_minutes = 180.0
         elif visitor_type == "elderly":
             mean_minutes = 120.0        
+        elif visitor_type == "group":
+            mean_minutes = 130.0
         else:
             mean_minutes = 150.0
 
