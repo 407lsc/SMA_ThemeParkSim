@@ -37,6 +37,9 @@ class AgentRuntime(Protocol):
     def refresh_agent_position(self, agent: "Agent") -> None:
         ...
 
+    def path_to_entrance(self, start: NodeId) -> Path:
+        ...
+
 
 class NodeData:
     def __init__(
