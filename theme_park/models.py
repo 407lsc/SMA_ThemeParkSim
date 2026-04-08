@@ -4,6 +4,7 @@ import random
 from queue import Empty, Queue
 from pathlib import Path 
 from typing import Dict, List, Literal, Optional, Protocol, Tuple
+from .config import DEFAULT_AGENT_SPEED
 import pygame
 
 Vec2 = Tuple[float, float]
@@ -361,6 +362,7 @@ class Agent:
         self.path = path
         self.state = state
 
+        # Safety checks
         valid_visitor_types = {"teenager", "adult", "elderly"}
         if visitor_type not in valid_visitor_types:
             raise ValueError(
@@ -585,5 +587,79 @@ class Agent:
 
 # Feel free to inherit from or modify the above Agent class to implement different visitor behaviors.
 
-class MyAgent(Agent):
-    pass
+class TeenagerAgent(Agent):
+    """Fast-moving solo or group visitor with a longer average stay."""
+
+    def __init__(
+        self,
+        agent_id: int,
+        color: RGBColor,
+        path: Path,
+        group_size: int = 1,
+        queue_type: str = "normal",
+        planned_departure_time: float = 180.0,
+        **kwargs,
+    ) -> None:
+        super().__init__(
+            agent_id=agent_id,
+            speed=DEFAULT_AGENT_SPEED * 1.10,
+            color=color,
+            path=path,
+            visitor_type="teenager",
+            group_size=group_size,
+            queue_type=queue_type,
+            planned_departure_time=planned_departure_time,
+            **kwargs,
+        )
+
+
+class AdultAgent(Agent):
+    """Average-speed visitor, most common in the park."""
+
+    def __init__(
+        self,
+        agent_id: int,
+        color: RGBColor,
+        path: Path,
+        group_size: int = 1,
+        queue_type: str = "normal",
+        planned_departure_time: float = 150.0,
+        **kwargs,
+    ) -> None:
+        super().__init__(
+            agent_id=agent_id,
+            speed=DEFAULT_AGENT_SPEED,
+            color=color,
+            path=path,
+            visitor_type="adult",
+            group_size=group_size,
+            queue_type=queue_type,
+            planned_departure_time=planned_departure_time,
+            **kwargs,
+        )
+
+
+class ElderlyAgent(Agent):
+    """Slower-moving visitor with a shorter average stay."""
+
+    def __init__(
+        self,
+        agent_id: int,
+        color: RGBColor,
+        path: Path,
+        group_size: int = 1,
+        queue_type: str = "normal",
+        planned_departure_time: float = 120.0,
+        **kwargs,
+    ) -> None:
+        super().__init__(
+            agent_id=agent_id,
+            speed=DEFAULT_AGENT_SPEED * 0.80,
+            color=color,
+            path=path,
+            visitor_type="elderly",
+            group_size=group_size,
+            queue_type=queue_type,
+            planned_departure_time=planned_departure_time,
+            **kwargs,
+        )

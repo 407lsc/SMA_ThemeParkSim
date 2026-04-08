@@ -7,7 +7,7 @@ from typing import Dict, List, Optional, Tuple
 import networkx as nx
 
 from .config import DEFAULT_AGENT_COLOR, DEFAULT_AGENT_SPEED
-from .models import Agent, EdgeData, EdgeKey, NodeData, Ride, Vec2
+from .models import Agent, AdultAgent, ElderlyAgent, TeenagerAgent, EdgeData, EdgeKey, NodeData, Ride, Vec2
 
 class ThemeParkSim:
     def __init__(self, agent_count: int = 15) -> None:
@@ -95,28 +95,27 @@ class ThemeParkSim:
             random.randint(30, 240),
         )
 
-        speed = DEFAULT_AGENT_SPEED
-        if visitor_type == "teenager":
-            speed *= 1.10
-        elif visitor_type == "elderly":
-            speed *= 0.80
-
-        agent = Agent(
+        shared_kwargs = dict(
             agent_id=agent_id,
-            speed=speed,
             color=random_color,
             path=path,
+            group_size=group_size,
+            queue_type=queue_type,
+            planned_departure_time=planned_departure_time,
             current_index=0,
             progress=0.0,
             pos=pos,
-            visitor_type=visitor_type,
-            group_size=group_size,
-            queue_type=queue_type,
             time_in_park=0.0,
-            planned_departure_time=planned_departure_time,
             is_exiting=False,
             has_left_park=False,
         )
+
+        if visitor_type == "teenager":
+            agent = TeenagerAgent(**shared_kwargs)
+        elif visitor_type == "elderly":
+            agent = ElderlyAgent(**shared_kwargs)
+        else:
+            agent = AdultAgent(**shared_kwargs)
 
         self.agents.append(agent)
         self.refresh_agent_position(agent)
