@@ -669,30 +669,31 @@ class ElderlyAgent(Agent):
             **kwargs,
         )
 
-    class GroupAgent(Agent):
-        """Visitors arriving as a group with unique dynamics."""
+class GroupAgent(Agent):
+    """Visitors arriving as a group with unique dynamics."""
 
-        def __init__(
-            self,
-            agent_id: int,
-            color: RGBColor,
-            path: Path,
-            group_size: int = 2,
-            queue_type: str = "normal",
-            planned_departure_time: float = 160.0,
+    def __init__(
+        self,
+        agent_id: int,
+        color: RGBColor,
+        path: Path,
+        group_size: int = 2,
+        queue_type: str = "normal",
+        planned_departure_time: float = 160.0,
+        image_path: str = "inputs/group.png",
+        **kwargs,
+    ) -> None:
+        if group_size < 2:
+            group_size = 2  # enforce minimum group size
+        super().__init__(
+            agent_id=agent_id,
+            speed=DEFAULT_AGENT_SPEED * 0.95,  # slightly slower
+            color=color,
+            path=path,
+            visitor_type="group",
+            group_size=group_size,
+            queue_type=queue_type,
+            planned_departure_time=planned_departure_time,
+            image_path=image_path,
             **kwargs,
-        ) -> None:
-            if group_size < 2:
-                group_size = 2  # enforce minimum
-            super().__init__(
-                agent_id=agent_id,
-                speed=DEFAULT_AGENT_SPEED * 0.95,
-                color=color,
-                path=path,
-                visitor_type="group",
-                group_size=group_size,
-                queue_type=queue_type,
-                planned_departure_time=planned_departure_time,
-                image_path="inputs/group.png",
-                **kwargs,
-            )
+        )
