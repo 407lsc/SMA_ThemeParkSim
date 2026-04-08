@@ -150,9 +150,12 @@ class ParkView:
             if not isinstance(meta, Ride):
                 continue
 
-            base_radius = 16
-            node_radius = meta.radius if meta.radius is not None else base_radius
-            row_y_start = int(y + node_radius + top_margin)
+            if meta.image is not None:
+                row_y_start = int(y + meta.image.get_height() / 2 + top_margin)
+            else:
+                base_radius = 16
+                node_radius = meta.radius if meta.radius is not None else base_radius
+                row_y_start = int(y + node_radius + top_margin)
 
             for row_index, (label, queue_type, label_color) in enumerate(queue_rows):
                 if queue_type == "single_rider":
@@ -247,20 +250,30 @@ class ParkView:
             color = meta.color if meta.color is not None else default_color
 
             used_image = False
+            image_half_height = 0
+
             if meta.image is not None:
                 image_rect = meta.image.get_rect(center=(int(x), int(y)))
                 self.screen.blit(meta.image, image_rect)
                 used_image = True
+                image_half_height = meta.image.get_height() // 2
 
             if not used_image:
                 pygame.draw.circle(self.screen, color, (int(x), int(y)), radius)
-
-            # Keep a border around both image and circle markers for consistency.
-            pygame.draw.circle(self.screen, (255, 255, 255), (int(x), int(y)), radius, 2)
+                pygame.draw.circle(self.screen, (255, 255, 255), (int(x), int(y)), radius, 2)
 
             label = meta.name
             label_surface = self.small_font.render(label, True, (30, 30, 30))
-            self.screen.blit(label_surface, (x - label_surface.get_width() // 2, y - radius - 22))
+
+            if used_image:
+                label_y = int(y - image_half_height - 18)
+            else:
+                label_y = int(y - radius - 22)
+
+            self.screen.blit(
+                label_surface,
+                (int(x - label_surface.get_width() // 2), label_y),
+            )
 
         self._draw_ride_queues(sim)
 
@@ -275,9 +288,25 @@ class ParkView:
             box_w, box_h = 220, 90
             box_x = min(mouse_x + 15, SIM_W - box_w - 10)
             box_y = min(mouse_y + 15, HEIGHT - box_h - 10)
-            pygame.draw.rect(self.screen, HOVER_PANEL_BG, pygame.Rect(box_x, box_y, box_w, box_h), border_radius=6)
-            pygame.draw.rect(self.screen, HOVER_BORDER, pygame.Rect(box_x, box_y, box_w, box_h), 1, border_radius=6)
-            draw_multiline(self.screen, sim.hovered_info(tooltip_node), (box_x + 10, box_y + 10), self.small_font)
+            pygame.draw.rect(
+                self.screen,
+                HOVER_PANEL_BG,
+                pygame.Rect(box_x, box_y, box_w, box_h),
+                border_radius=6,
+            )
+            pygame.draw.rect(
+                self.screen,
+                HOVER_BORDER,
+                pygame.Rect(box_x, box_y, box_w, box_h),
+                1,
+                border_radius=6,
+            )
+            draw_multiline(
+                self.screen,
+                sim.hovered_info(tooltip_node),
+                (box_x + 10, box_y + 10),
+                self.small_font,
+            )
 
         hud_lines = [
             f"Agents: {len(sim.agents)}",
@@ -289,8 +318,14 @@ class ParkView:
         ]
         line_height = 24
         hud_y = HEIGHT - (line_height * len(hud_lines))
+
         for i, line in enumerate(hud_lines):
-            draw_text(self.screen, line, (SIM_W + 15, hud_y + i * line_height), self.small_font)
+            draw_text(
+                self.screen,
+                line,
+                (SIM_W + 15, hud_y + i * line_height),
+                self.small_font,
+            )
 
 
 class ControlPanel:

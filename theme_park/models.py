@@ -70,7 +70,7 @@ class NodeData:
 
                     # 🔥 Bigger sizing logic
                     if kind == "ride":
-                        size = 90   # 👈 adjust this (80–120 recommended)
+                        size = 120   # 👈 adjust this (80–120 recommended)
                     else:
                         size = 40   # smaller for intersections
 
