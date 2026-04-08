@@ -230,8 +230,8 @@ class Ride(NodeData):
                 self.normal_queue.queue.appendleft(entry)
             self._queued_agent_ids.add(agent_id)
 
-    def process_queues(self, current_time_minutes: float) -> None:
-        # If ride is currently running, nobody can board
+    def process_queues(self, current_time_minutes: float, park_is_closing: bool = False) -> None:
+        # If a ride is already running, let it finish.
         if self._ride_end_time is not None:
             if current_time_minutes < self._ride_end_time:
                 return
@@ -244,22 +244,24 @@ class Ride(NodeData):
             self._on_ride_agents.clear()
             self._ride_end_time = None
 
-        remaining_capacity = self.capacity
-        boarded_groups: list[tuple[AgentId, int, str]] = []
+        # If park is closing, do not board a new cycle.
+        if park_is_closing:
+            return
 
-        # Step 1: board as many fastpass groups as possible
+        remaining_capacity = self.capacity
+        boarded_groups: List[tuple[AgentId, int, str]] = []
+
+        # Fastpass, then normal, then single rider as filler
         new_boarded = self.remove_from_queue(self.fastpass_queue, remaining_capacity)
         if new_boarded:
             boarded_groups.extend(new_boarded)
             remaining_capacity -= sum(group_size for _, group_size, _ in new_boarded)
 
-        # Step 2: board as many normal groups as possible
         new_boarded = self.remove_from_queue(self.normal_queue, remaining_capacity)
         if new_boarded:
             boarded_groups.extend(new_boarded)
             remaining_capacity -= sum(group_size for _, group_size, _ in new_boarded)
 
-        # Step 3: if leftover seats remain, use single riders to fill them
         if remaining_capacity > 0:
             new_boarded = self.remove_from_queue(self.single_rider_queue, remaining_capacity)
             if new_boarded:
@@ -268,15 +270,12 @@ class Ride(NodeData):
 
         boarded_people = sum(group_size for _, group_size, _ in boarded_groups)
 
-        # Only start ride if minimum occupancy threshold is reached
         if boarded_people >= self.minimum_required_riders:
             self._on_ride_agents = boarded_groups
             self._ride_end_time = current_time_minutes + self.ride_duration_minutes
         else:
-            # Not enough people: restore everyone to original queues
             for agent_id, _group_size, _queue_type in boarded_groups:
                 self._boarded_agent_ids.discard(agent_id)
-
             self._restore_to_original_queue(boarded_groups)
 
     def is_boarded_from_queue(self, agent_id: AgentId) -> bool:
@@ -490,6 +489,7 @@ class Agent:
             if self.is_exiting and current_node == "entrance":
                 self.has_left_park = True
                 runtime.refresh_agent_position(self)
+                self._finalize_exit(runtime)
                 return
 
             self.completed_loops += 1
@@ -520,6 +520,7 @@ class Agent:
             if self.is_exiting and arrived == "entrance":
                 self.has_left_park = True
                 runtime.refresh_agent_position(self)
+                self._finalize_exit(runtime)
                 return
 
             if isinstance(node, Ride) and not self.is_exiting:
@@ -540,8 +541,17 @@ class Agent:
         runtime.refresh_agent_position(self)
 
     def _execute_queuing(self, runtime: AgentRuntime) -> None:
-        """Queued agents wait until they are boarded onto the ride."""
+        """Queued agents wait until boarded, unless they are exiting."""
         self._leave_current_edge(runtime)
+
+        # Closing override: leave queue immediately
+        if self.is_exiting:
+            current_node = self._current_node_id()
+            self.replan_path(runtime.path_to_entrance(current_node))
+            self.state = "moving"
+            runtime.refresh_agent_position(self)
+            return
+
         node = runtime.node_data_for(self._current_node_id())
 
         if not isinstance(node, Ride):
@@ -555,7 +565,6 @@ class Agent:
         runtime.refresh_agent_position(self)
 
     def _execute_on_ride(self, runtime: AgentRuntime) -> None:
-        """Agents remain on the ride until the ride cycle completes."""
         self._leave_current_edge(runtime)
         node = runtime.node_data_for(self._current_node_id())
 
@@ -584,7 +593,29 @@ class Agent:
         self.state = "moving"
         runtime.refresh_agent_position(self)
 
+    def _finalize_exit(self, runtime: AgentRuntime) -> None:
+        """Handle final exit from the park."""
+        if not self.has_left_park:
+            return
 
+        # Inform simulation to remove and count this agent
+        runtime.remove_agent(self)
+
+    def begin_exit(self, runtime: AgentRuntime) -> None:
+        """Public wrapper to send this agent to the entrance."""
+        if self.has_left_park or self.is_exiting:
+            return
+        self._start_exit(runtime)
+    
+    def force_exit_from_queue(self, runtime: AgentRuntime) -> None:
+        """Force a queued agent to stop waiting and leave the park immediately."""
+        self._leave_current_edge(runtime)
+        self.is_exiting = True
+        self.state = "moving"
+
+        current_node = self._current_node_id()
+        self.replan_path(runtime.path_to_entrance(current_node))
+        runtime.refresh_agent_position(self)
 
 # Feel free to inherit from or modify the above Agent class to implement different visitor behaviors.
 

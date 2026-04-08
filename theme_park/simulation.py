@@ -25,7 +25,11 @@ class ThemeParkSim:
         self.minutes_per_step: float = 0.1  # 1 step = 1 minute (you can tune this)
         # Park time in minutes since midnight
         self.park_open_time = 9 * 60    # 09:00
-        self.park_close_time = 21 * 60  # 21:00
+        self.park_close_time = 12 * 60  # 12:00
+        self.park_is_closing = False
+
+        self.total_entered = 0
+        self.total_exited = 0
 
         self.current_time_minutes: float = self.park_open_time
         self.initialise()
@@ -43,11 +47,12 @@ class ThemeParkSim:
 
         for meta in self.node_data.values():
             if isinstance(meta, Ride):
-                meta.process_queues(self.current_time_minutes)
+                meta.process_queues(self.current_time_minutes, self.park_is_closing)
 
-        # Example: spawn a new agent every 20 steps on average
-        if random.random() > 0.95:
-            self.add_agent()
+        # Do not admit new agents after closing starts
+        if not self.park_is_closing:
+            if random.random() > 0.95:
+                self.add_agent()
 
     def _random_visitor_type(self) -> str:
         # You can tune these weights if you want a different population mix
@@ -118,7 +123,6 @@ class ThemeParkSim:
             is_exiting=False,
             has_left_park=False,
         )
-
         if visitor_type == "teenager":
             agent = TeenagerAgent(**shared_kwargs)
         elif visitor_type == "elderly":
@@ -128,10 +132,17 @@ class ThemeParkSim:
         else:
             agent = AdultAgent(**shared_kwargs)
 
+        self.total_entered += agent.group_size
+
         self.agents.append(agent)
         self.refresh_agent_position(agent)
         self.agent_count = len(self.agents)
         return agent
+
+    def remove_agent(self, agent: Agent) -> None:
+        self.total_exited += agent.group_size
+        if agent in self.agents:
+            self.agents.remove(agent)
 
     def _add_node(
         self,
@@ -276,13 +287,21 @@ class ThemeParkSim:
 
         self.current_time_step += 1
         self.current_time_minutes += self.minutes_per_step
-
         self.elapsed_sim_time += dt
+
+        if self.current_time_minutes >= self.park_close_time:
+            self._begin_park_closing()
+
         self.execute_step(dt)
 
         for agent in list(self.agents):
             agent.execute_step(dt, self)
 
+        if self.park_is_closing:
+            if agent.state == "queuing":
+                agent.force_exit_from_queue(self)
+
+        # Remove agents who have left the park
         self.agents = [agent for agent in self.agents if not agent.has_left_park]
         self.agent_count = len(self.agents)
 
@@ -340,7 +359,45 @@ class ThemeParkSim:
     def toggle_pause(self) -> None:
         self.paused = not self.paused
 
-    
+    def close_queues(self) -> list[int]:
+        removed_ids = []
+
+        for queue in [self.fastpass_queue, self.normal_queue, self.single_rider_queue]:
+            while not queue.empty():
+                entry = self._pop_next(queue)
+                if entry is None:
+                    break
+
+                agent_id = entry[0]
+
+                self._queued_agent_ids.discard(agent_id)
+                self._boarded_agent_ids.discard(agent_id)
+                self._released_agent_ids.discard(agent_id)
+
+                removed_ids.append(agent_id)
+
+        return removed_ids
+
+    def _begin_park_closing(self) -> None:
+        if self.park_is_closing:
+            return
+
+        self.park_is_closing = True
+
+        queued_agent_ids: set[int] = set()
+
+        for meta in self.node_data.values():
+            if isinstance(meta, Ride):
+                queued_agent_ids.update(meta.close_queues())
+
+        for agent in self.agents:
+            # Everyone still waiting in queues must leave immediately
+            if agent.agent_id in queued_agent_ids:
+                agent.force_exit_from_queue(self)
+
+            # Optional: also send walkers/stationary agents home at closing
+            elif agent.state in ("moving", "stationary"):
+                agent.force_exit_from_queue(self)
     
     
     
