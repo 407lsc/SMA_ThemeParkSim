@@ -288,7 +288,6 @@ class Ride(NodeData):
         self._released_agent_ids.remove(agent_id)
         return True
 
-
     #Need to add discrete event simulation code here
 
 # Feel free to inherit from or modify the above Ride class to implement different ride behaviors.

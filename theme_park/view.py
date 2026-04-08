@@ -53,12 +53,7 @@ def draw_multiline(
 class ParkView:
     """Render the simulation scene and HUD elements onto the pygame screen."""
 
-    def __init__(
-        self,
-        screen: pygame.Surface,
-        font: pygame.font.Font,
-        small_font: pygame.font.Font,
-    ) -> None:
+    def __init__(self, screen: pygame.Surface, font: pygame.font.Font, small_font: pygame.font.Font) -> None:
         """Store drawing surfaces and fonts used by the view layer."""
         self.screen = screen
         self.font = font
@@ -294,25 +289,9 @@ class ParkView:
             box_w, box_h = 220, 90
             box_x = min(mouse_x + 15, SIM_W - box_w - 10)
             box_y = min(mouse_y + 15, HEIGHT - box_h - 10)
-            pygame.draw.rect(
-                self.screen,
-                HOVER_PANEL_BG,
-                pygame.Rect(box_x, box_y, box_w, box_h),
-                border_radius=6,
-            )
-            pygame.draw.rect(
-                self.screen,
-                HOVER_BORDER,
-                pygame.Rect(box_x, box_y, box_w, box_h),
-                1,
-                border_radius=6,
-            )
-            draw_multiline(
-                self.screen,
-                sim.hovered_info(tooltip_node),
-                (box_x + 10, box_y + 10),
-                self.small_font,
-            )
+            pygame.draw.rect(self.screen, HOVER_PANEL_BG, pygame.Rect(box_x, box_y, box_w, box_h), border_radius=6)
+            pygame.draw.rect(self.screen, HOVER_BORDER, pygame.Rect(box_x, box_y, box_w, box_h), 1, border_radius=6)
+            draw_multiline(self.screen, sim.hovered_info(tooltip_node), (box_x + 10, box_y + 10), self.small_font)
 
         hud_lines = [
             f"Agents: {len(sim.agents)}",
@@ -324,14 +303,8 @@ class ParkView:
         ]
         line_height = 24
         hud_y = HEIGHT - (line_height * len(hud_lines))
-
         for i, line in enumerate(hud_lines):
-            draw_text(
-                self.screen,
-                line,
-                (SIM_W + 15, hud_y + i * line_height),
-                self.small_font,
-            )
+            draw_text(self.screen, line, (SIM_W + 15, hud_y + i * line_height), self.small_font)
 
 
 class ControlPanel:

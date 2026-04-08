@@ -168,7 +168,6 @@ class ThemeParkSim:
                 radius=radius,
                 image_path=image_path,
             )
-
         self.node_data[node_id] = node
 
     def _build_park(self) -> None:
@@ -201,7 +200,16 @@ class ThemeParkSim:
             self.edge_data[edge.key] = edge
             self.graph.add_edge(u, v, length=edge.length, crowd=edge.crowd)
 
-    def random_path(self, start: str) -> list[str]:
+
+    # Agent runtime API (consumed by Agent in models.py via AgentRuntime):
+    # - random_path
+    # - refresh_agent_position
+    # - enter_edge
+    # - leave_edge
+    # - edge_length
+    # - node_data_for
+    def random_path(self, start: str) -> List[str]:
+        # Provide route planning for agent decisions/replanning.
         rides = self.rides
         target = random.choice(rides)
         if start == target:
@@ -217,6 +225,7 @@ class ThemeParkSim:
             agent.agent_id = i
 
     def refresh_agent_position(self, agent: Agent) -> None:
+        # Convert traversal state (edge + progress) into renderable coordinates.
         edge = agent.current_edge()
         if edge is None:
             agent.pos = self.positions[agent.path[-1]]
@@ -230,6 +239,7 @@ class ThemeParkSim:
         )
 
     def enter_edge(self, u: str, v: str, agent_id: int) -> None:
+        # Track edge occupancy when an agent starts traversing an edge.
         if not self.graph.has_edge(u, v):
             return
         key = EdgeData.canonical_key(u, v)
@@ -240,6 +250,7 @@ class ThemeParkSim:
         self.graph[u][v]["crowd"] = edge.crowd
 
     def leave_edge(self, u: str, v: str, agent_id: int) -> None:
+        # Track edge occupancy when an agent leaves an edge.
         if not self.graph.has_edge(u, v):
             return
         key = EdgeData.canonical_key(u, v)
@@ -250,6 +261,7 @@ class ThemeParkSim:
         self.graph[u][v]["crowd"] = edge.crowd
 
     def edge_length(self, u: str, v: str) -> float:
+        # Return edge travel length for movement updates.
         edge = self.edge_data.get(EdgeData.canonical_key(u, v))
         if edge is None:
             return 0.0
