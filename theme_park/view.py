@@ -281,7 +281,13 @@ class ParkView:
             if agent.state in ("queuing", "on_ride"):
                 continue
             x, y = agent.pos
-            pygame.draw.circle(self.screen, agent.color, (int(x), int(y)), 5)
+            if agent.image_path:
+                img = pygame.image.load(agent.image_path).convert_alpha()
+                img = pygame.transform.smoothscale(img, (24, 24))
+                rect = img.get_rect(center=(int(x), int(y)))
+                self.screen.blit(img, rect)
+            else:
+                pygame.draw.circle(self.screen, agent.color, (int(x), int(y)), 5)
 
         if tooltip_node is not None and sim.node_data[tooltip_node].kind == "ride":
             mouse_x, mouse_y = pygame.mouse.get_pos()

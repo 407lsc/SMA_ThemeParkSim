@@ -355,12 +355,14 @@ class Agent:
         planned_departure_time: float = 180.0,
         is_exiting: bool = False,
         has_left_park: bool = False,
+        image_path: Optional[str] = None, # for image icon
     ) -> None:
         self.agent_id = agent_id
         self.speed = speed
         self.color = color
         self.path = path
         self.state = state
+        self.image_path = image_path
 
         # Safety checks for visitor & queue types
         valid_visitor_types = {"teenager", "adult", "elderly", "group"}
@@ -609,6 +611,7 @@ class TeenagerAgent(Agent):
             group_size=group_size,
             queue_type=queue_type,
             planned_departure_time=planned_departure_time,
+            image_path="inputs/teenager.png",
             **kwargs,
         )
 
@@ -635,6 +638,7 @@ class AdultAgent(Agent):
             group_size=group_size,
             queue_type=queue_type,
             planned_departure_time=planned_departure_time,
+            image_path="inputs/adult.png",
             **kwargs,
         )
 
@@ -661,6 +665,7 @@ class ElderlyAgent(Agent):
             group_size=group_size,
             queue_type=queue_type,
             planned_departure_time=planned_departure_time,
+            image_path="inputs/elderly.png",
             **kwargs,
         )
 
@@ -688,5 +693,6 @@ class ElderlyAgent(Agent):
                 group_size=group_size,
                 queue_type=queue_type,
                 planned_departure_time=planned_departure_time,
+                image_path="inputs/group.png",
                 **kwargs,
             )

@@ -52,7 +52,7 @@ class ThemeParkSim:
     def _random_visitor_type(self) -> str:
         # You can tune these weights if you want a different population mix
         return random.choices(
-            ["teenager", "adult", "elderly"],
+            ["teenager", "adult", "elderly", "group"],
             weights=[0.3, 0.5, 0.2],
             k=1
         )[0]
@@ -304,7 +304,7 @@ class ThemeParkSim:
         if visitor_type == "teenager":
             mean_minutes = 180.0
         elif visitor_type == "elderly":
-            mean_minutes = 120.0
+            mean_minutes = 120.0        
         else:
             mean_minutes = 150.0
 
