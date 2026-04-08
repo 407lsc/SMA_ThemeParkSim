@@ -310,6 +310,9 @@ class ParkView:
 
         hud_lines = [
             f"Agents: {len(sim.agents)}",
+            f"People in park: {sum(a.group_size for a in sim.agents)}",
+            f"Total entered: {sim.total_entered}",
+            f"Total exited: {sim.total_exited}",
             f"Agent speed: {DEFAULT_AGENT_SPEED:.0f}",
             f"Sim speed: {simulation_speed:.1f}x",
             f"Current step: {sim.current_time_step}",
