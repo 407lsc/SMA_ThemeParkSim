@@ -23,6 +23,9 @@ class App:
 
         self.sim = ThemeParkSim()
         self.simulation_speed = 1.0
+        self._step_accumulator = 0.0
+        self._max_steps_hard_cap = 400
+        self._max_frame_dt_for_steps = 0.1
         self.tooltip_node: Optional[str] = None
         self.mouse_pos: Tuple[int, int] = (0, 0)
 
@@ -30,26 +33,64 @@ class App:
         self.control_panel = ControlPanel(self.ui_manager, self.sim)
         self.view = ParkView(self.screen, self.font, self.small_font)
 
-    def reset_sim(self, agent_count: Optional[int] = None) -> None:
-        if agent_count is None:
-            self.sim = ThemeParkSim()
-        else:
-            self.sim = ThemeParkSim(agent_count=agent_count)
+    def reset_sim(self) -> None:
+        self.sim = ThemeParkSim()
         self.control_panel.sync_from_sim(self.sim, 1.0)
         self.simulation_speed = 1.0
+        self._step_accumulator = 0.0
 
     def add_agent(self) -> None:
         self.sim.add_agent()
 
+    @staticmethod
+    def _clamp(value: float, min_value: float, max_value: float) -> float:
+        return max(min_value, min(max_value, value))
+
+    def _apply_sim_speed(self, speed: float) -> None:
+        previous_speed = self.simulation_speed
+        self.simulation_speed = speed
+        if speed < previous_speed:
+            # Prevent high-speed backlog from continuing to execute after slowdown.
+            self._step_accumulator = 0.0
+        self.control_panel.sim_speed_value_entry.set_text(f"{speed:.1f}")
+
+    def _jump_slider_to_mouse(self, mouse_pos: Tuple[int, int]) -> None:
+        slider_specs = [
+            (self.control_panel.sim_speed_slider, self.control_panel.sim_speed_range),
+        ]
+
+        for slider, (min_v, max_v) in slider_specs:
+            rect = slider.rect
+            if rect is None:
+                continue
+            if not rect.collidepoint(mouse_pos):
+                continue
+
+            ratio = (mouse_pos[0] - rect.left) / max(1, rect.width)
+            ratio = self._clamp(ratio, 0.0, 1.0)
+            raw_value = min_v + ratio * (max_v - min_v)
+
+            value = self._clamp(raw_value, min_v, max_v)
+            slider.set_current_value(value)
+            self._apply_sim_speed(value)
+            return
+
     """Logic for handling changes to slider parameters"""
     def _handle_slider_event(self, event) -> None:
-        if event.ui_element == self.control_panel.agent_slider:
-            new_count = int(event.value)
-            if new_count != self.sim.agent_count:
-                self.reset_sim(agent_count=new_count)
+        if event.ui_element == self.control_panel.sim_speed_slider:
+            self._apply_sim_speed(float(event.value))
 
-        elif event.ui_element == self.control_panel.sim_speed_slider:
-            self.simulation_speed = float(event.value)
+    def _handle_text_entry_event(self, event) -> None:
+        if event.ui_element == self.control_panel.sim_speed_value_entry:
+            try:
+                entered = float(event.text.strip())
+            except ValueError:
+                self.control_panel.sim_speed_value_entry.set_text(f"{self.simulation_speed:.1f}")
+                return
+            min_v, max_v = self.control_panel.sim_speed_range
+            clamped = self._clamp(entered, min_v, max_v)
+            self.control_panel.sim_speed_slider.set_current_value(clamped)
+            self._apply_sim_speed(clamped)
 
     """Logic for handling button press events"""
     def _handle_button_event(self, event) -> None:
@@ -68,6 +109,8 @@ class App:
             elif event.type == pygame.KEYDOWN:
                 if event.key == pygame.K_p or event.key == pygame.K_SPACE:
                     self.toggle_pause()
+            elif event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
+                self._jump_slider_to_mouse(event.pos)
 
             self.ui_manager.process_events(event)
 
@@ -75,10 +118,28 @@ class App:
                 self._handle_slider_event(event)
             elif event.type == pygame_gui.UI_BUTTON_PRESSED:
                 self._handle_button_event(event)
+            elif event.type == pygame_gui.UI_TEXT_ENTRY_FINISHED:
+                self._handle_text_entry_event(event)
 
     def update(self, dt: float) -> None:
         self.ui_manager.update(dt)
-        self.sim.step(dt * self.simulation_speed)
+
+        # Run discrete simulation steps from a speed-scaled fixed-step budget.
+        # This keeps step progression sequential and avoids skipping steps.
+        if not self.sim.paused:
+            # Clamp frame dt to avoid giant catch-up jumps after hiccups/focus loss.
+            effective_dt = min(dt, self._max_frame_dt_for_steps)
+            self._step_accumulator += effective_dt * self.simulation_speed * FPS
+            steps_available = int(self._step_accumulator)
+            # At speed=x, roughly x steps become due per rendered frame.
+            # Use an adaptive cap so high speeds are not throttled by a low fixed cap.
+            adaptive_cap = min(self._max_steps_hard_cap, max(8, int(self.simulation_speed) + 8))
+            steps_to_run = min(steps_available, adaptive_cap)
+            if steps_to_run > 0:
+                self._step_accumulator -= steps_to_run
+                fixed_dt = 1.0 / FPS
+                for _ in range(steps_to_run):
+                    self.sim.step(fixed_dt)
 
         self.mouse_pos = pygame.mouse.get_pos()
         if self.mouse_pos[0] < SIM_W:

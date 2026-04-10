@@ -6,7 +6,7 @@ from typing import Dict, List, Optional, Tuple
 
 import networkx as nx
 
-from .config import DEFAULT_AGENT_COLOR, DEFAULT_AGENT_SPEED
+from .config import SIM_TIME_MINUTES, SIM_TIME_STEPS, PARK_OPEN_TIME, PARK_CLOSE_TIME
 from .models import Agent, AdultAgent, ElderlyAgent, TeenagerAgent, GroupAgent, EdgeData, EdgeKey, NodeData, Ride, Vec2
 
 class ThemeParkSim:
@@ -17,26 +17,40 @@ class ThemeParkSim:
         self.edge_data: Dict[EdgeKey, EdgeData] = {}
         self.agents: List[Agent] = []
         self.current_time_step: int = 0
-        self.elapsed_sim_time: float = 0.0
 
         self.agent_count = agent_count
         self.paused: bool = False
 
-        self.minutes_per_step: float = 0.1  # 1 step = 1 minute (you can tune this)
+        if SIM_TIME_STEPS <= 0:
+            raise ValueError("SIM_TIME_STEPS must be greater than 0")
+        if SIM_TIME_MINUTES <= 0:
+            raise ValueError("SIM_TIME_MINUTES must be greater than 0")
+
+        # Define simulation time mapping as:
+        # SIM_TIME_STEPS steps = SIM_TIME_MINUTES simulated minutes.
+        self.minutes_per_step: float = SIM_TIME_MINUTES / SIM_TIME_STEPS
         # Park time in minutes since midnight
-        self.park_open_time = 9 * 60    # 09:00
-        self.park_close_time = 12 * 60  # 12:00
+        self.park_open_time = PARK_OPEN_TIME
+        self.park_close_time = PARK_CLOSE_TIME
         self.park_is_closing = False
 
         self.total_entered = 0
         self.total_exited = 0
-
-        self.current_time_minutes: float = self.park_open_time
         self.initialise()
 
     @property
     def rides(self) -> list[str]:
         return [node for node, meta in self.node_data.items() if isinstance(meta, Ride)]
+
+    @property
+    def elapsed_sim_time(self) -> float:
+        """Elapsed simulated park time in minutes since opening."""
+        return self.current_time_step * self.minutes_per_step
+
+    @property
+    def current_time_minutes(self) -> float:
+        """Current simulated clock time in minutes since midnight."""
+        return self.park_open_time + self.elapsed_sim_time
 
     def initialise(self) -> None:
         self._build_park()
@@ -286,8 +300,6 @@ class ThemeParkSim:
             return
 
         self.current_time_step += 1
-        self.current_time_minutes += self.minutes_per_step
-        self.elapsed_sim_time += dt
 
         if self.current_time_minutes >= self.park_close_time:
             self._begin_park_closing()
@@ -298,8 +310,9 @@ class ThemeParkSim:
             agent.execute_step(dt, self)
 
         if self.park_is_closing:
-            if agent.state == "queuing":
-                agent.force_exit_from_queue(self)
+            for agent in self.agents:
+                if agent.state == "queuing":
+                    agent.force_exit_from_queue(self)
 
         # Remove agents who have left the park
         self.agents = [agent for agent in self.agents if not agent.has_left_park]
@@ -321,6 +334,37 @@ class ThemeParkSim:
             lines.append(f"On Ride: {meta.riders_on_ride_count}")
             lines.append(f"Cycle Length: {meta.ride_duration_minutes} minutes")
             lines.append("Status: Running" if meta.is_running else "Status: Idle")
+        return "\n".join(lines)
+
+    @staticmethod
+    def _format_hhmm(total_minutes: float) -> str:
+        minute_value = int(total_minutes)
+        hours = (minute_value // 60) % 24
+        minutes = minute_value % 60
+        return f"{hours:02d}:{minutes:02d}"
+
+    def agent_at_position(self, mouse_pos: Tuple[int, int], radius: int = 14) -> Optional[Agent]:
+        mx, my = mouse_pos
+        radius_sq = radius * radius
+        for agent in reversed(self.agents):
+            if agent.state in ("queuing", "on_ride"):
+                continue
+            ax, ay = agent.pos
+            if (mx - ax) ** 2 + (my - ay) ** 2 <= radius_sq:
+                return agent
+        return None
+
+    def hovered_agent_info(self, agent: Agent) -> str:
+        entry_time_minutes = self.current_time_minutes - agent.time_in_park
+        planned_departure_minutes = entry_time_minutes + agent.planned_departure_time
+
+        lines = [
+            f"Agent {agent.agent_id}",
+            f"Visitor Type: {agent.visitor_type}",
+            f"Planned Departure: {self._format_hhmm(planned_departure_minutes)}",
+        ]
+        if agent.group_size > 1:
+            lines.append(f"Group Size: {agent.group_size}")
         return "\n".join(lines)
     
     def get_time_str(self) -> str:

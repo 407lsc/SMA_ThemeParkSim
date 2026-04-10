@@ -290,6 +290,21 @@ class Ride(NodeData):
         self._released_agent_ids.remove(agent_id)
         return True
 
+    def close_queues(self) -> list[AgentId]:
+        """Flush all waiting queues and return affected agent IDs."""
+        removed_ids: list[AgentId] = []
+        for queue in (self.fastpass_queue, self.normal_queue, self.single_rider_queue):
+            while True:
+                entry = self._pop_next(queue)
+                if entry is None:
+                    break
+                agent_id = entry[0]
+                self._queued_agent_ids.discard(agent_id)
+                self._boarded_agent_ids.discard(agent_id)
+                self._released_agent_ids.discard(agent_id)
+                removed_ids.append(agent_id)
+        return removed_ids
+
     #Need to add discrete event simulation code here
 
 # Feel free to inherit from or modify the above Ride class to implement different ride behaviors.
