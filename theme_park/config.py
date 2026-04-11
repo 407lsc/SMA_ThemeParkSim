@@ -16,3 +16,11 @@ PANEL_BG = (235, 238, 242)
 
 DEFAULT_AGENT_SPEED = 80.0
 DEFAULT_AGENT_COLOR = (40, 40, 40)
+
+# Simulation clock mapping:
+# SIM_TIME_STEPS steps correspond to SIM_TIME_MINUTES simulated minutes.
+SIM_TIME_STEPS = 10
+SIM_TIME_MINUTES = 1.0
+
+PARK_OPEN_TIME = 9 * 60  # 9:00 AM in minutes
+PARK_CLOSE_TIME = 21 * 60  # 9:00 PM in minutes

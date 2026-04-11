@@ -4,6 +4,7 @@ import random
 from queue import Empty, Queue
 from pathlib import Path 
 from typing import Dict, List, Literal, Optional, Protocol, Tuple
+from .config import DEFAULT_AGENT_SPEED
 import pygame
 
 Vec2 = Tuple[float, float]
@@ -34,6 +35,9 @@ class AgentRuntime(Protocol):
         ...
 
     def refresh_agent_position(self, agent: "Agent") -> None:
+        ...
+
+    def path_to_entrance(self, start: NodeId) -> Path:
         ...
 
 
@@ -286,19 +290,19 @@ class Ride(NodeData):
         self._released_agent_ids.remove(agent_id)
         return True
 
-    def close_queues(self) -> list[int]:
-        removed_ids: list[int] = []
-
-        for queue in [self.fastpass_queue, self.normal_queue, self.single_rider_queue]:
-            while not queue.empty():
+    def close_queues(self) -> list[AgentId]:
+        """Flush all waiting queues and return affected agent IDs."""
+        removed_ids: list[AgentId] = []
+        for queue in (self.fastpass_queue, self.normal_queue, self.single_rider_queue):
+            while True:
                 entry = self._pop_next(queue)
                 if entry is None:
                     break
-
                 agent_id = entry[0]
+                self._queued_agent_ids.discard(agent_id)
+                self._boarded_agent_ids.discard(agent_id)
+                self._released_agent_ids.discard(agent_id)
                 removed_ids.append(agent_id)
-
-        self._queued_agent_ids.clear()
         return removed_ids
 
     #Need to add discrete event simulation code here
@@ -367,14 +371,17 @@ class Agent:
         planned_departure_time: float = 180.0,
         is_exiting: bool = False,
         has_left_park: bool = False,
+        image_path: Optional[str] = None, # for image icon
     ) -> None:
         self.agent_id = agent_id
         self.speed = speed
         self.color = color
         self.path = path
         self.state = state
+        self.image_path = image_path
 
-        valid_visitor_types = {"teenager", "adult", "elderly"}
+        # Safety checks for visitor & queue types
+        valid_visitor_types = {"teenager", "adult", "elderly", "group"}
         if visitor_type not in valid_visitor_types:
             raise ValueError(
                 f"visitor_type must be one of {valid_visitor_types}, got {visitor_type!r}"
@@ -630,5 +637,111 @@ class Agent:
 
 # Feel free to inherit from or modify the above Agent class to implement different visitor behaviors.
 
-class MyAgent(Agent):
-    pass
+class TeenagerAgent(Agent):
+    """Fast-moving solo or group visitor with a longer average stay."""
+
+    def __init__(
+        self,
+        agent_id: int,
+        color: RGBColor,
+        path: Path,
+        group_size: int = 1,
+        queue_type: str = "normal",
+        planned_departure_time: float = 180.0,
+        **kwargs,
+    ) -> None:
+        super().__init__(
+            agent_id=agent_id,
+            speed=DEFAULT_AGENT_SPEED * 1.10,
+            color=color,
+            path=path,
+            visitor_type="teenager",
+            group_size=group_size,
+            queue_type=queue_type,
+            planned_departure_time=planned_departure_time,
+            image_path="inputs/teenager.png",
+            **kwargs,
+        )
+
+
+class AdultAgent(Agent):
+    """Average-speed visitor, most common in the park."""
+
+    def __init__(
+        self,
+        agent_id: int,
+        color: RGBColor,
+        path: Path,
+        group_size: int = 1,
+        queue_type: str = "normal",
+        planned_departure_time: float = 150.0,
+        **kwargs,
+    ) -> None:
+        super().__init__(
+            agent_id=agent_id,
+            speed=DEFAULT_AGENT_SPEED,
+            color=color,
+            path=path,
+            visitor_type="adult",
+            group_size=group_size,
+            queue_type=queue_type,
+            planned_departure_time=planned_departure_time,
+            image_path="inputs/adult.png",
+            **kwargs,
+        )
+
+
+class ElderlyAgent(Agent):
+    """Slower-moving visitor with a shorter average stay."""
+
+    def __init__(
+        self,
+        agent_id: int,
+        color: RGBColor,
+        path: Path,
+        group_size: int = 1,
+        queue_type: str = "normal",
+        planned_departure_time: float = 120.0,
+        **kwargs,
+    ) -> None:
+        super().__init__(
+            agent_id=agent_id,
+            speed=DEFAULT_AGENT_SPEED * 0.80,
+            color=color,
+            path=path,
+            visitor_type="elderly",
+            group_size=group_size,
+            queue_type=queue_type,
+            planned_departure_time=planned_departure_time,
+            image_path="inputs/elderly.png",
+            **kwargs,
+        )
+
+class GroupAgent(Agent):
+    """Visitors arriving as a group with unique dynamics."""
+
+    def __init__(
+        self,
+        agent_id: int,
+        color: RGBColor,
+        path: Path,
+        group_size: int = 2,
+        queue_type: str = "normal",
+        planned_departure_time: float = 160.0,
+        image_path: str = "inputs/group.png",
+        **kwargs,
+    ) -> None:
+        if group_size < 2:
+            group_size = 2  # enforce minimum group size
+        super().__init__(
+            agent_id=agent_id,
+            speed=DEFAULT_AGENT_SPEED * 0.95,  # slightly slower
+            color=color,
+            path=path,
+            visitor_type="group",
+            group_size=group_size,
+            queue_type=queue_type,
+            planned_departure_time=planned_departure_time,
+            image_path=image_path,
+            **kwargs,
+        )

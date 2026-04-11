@@ -8,7 +8,6 @@ import pygame_gui
 
 from .config import (
     BG,
-    DEFAULT_AGENT_SPEED,
     EDGE_COLOR,
     HEIGHT,
     HOVER_BORDER,
@@ -81,12 +80,7 @@ def draw_multiline(
 class ParkView:
     """Render the simulation scene and HUD elements onto the pygame screen."""
 
-    def __init__(
-        self,
-        screen: pygame.Surface,
-        font: pygame.font.Font,
-        small_font: pygame.font.Font,
-    ) -> None:
+    def __init__(self, screen: pygame.Surface, font: pygame.font.Font, small_font: pygame.font.Font) -> None:
         """Store drawing surfaces and fonts used by the view layer."""
         self.screen = screen
         self.font = font
@@ -311,54 +305,50 @@ class ParkView:
             if agent.state in ("queuing", "on_ride"):
                 continue
             x, y = agent.pos
-            pygame.draw.circle(self.screen, agent.color, (int(x), int(y)), 5)
+            if agent.image_path:
+                img = pygame.image.load(agent.image_path).convert_alpha()
+                img = pygame.transform.smoothscale(img, (24, 24))
+                rect = img.get_rect(center=(int(x), int(y)))
+                self.screen.blit(img, rect)
+            else:
+                pygame.draw.circle(self.screen, agent.color, (int(x), int(y)), 5)
 
         if tooltip_node is not None and sim.node_data[tooltip_node].kind == "ride":
             mouse_x, mouse_y = pygame.mouse.get_pos()
             box_w, box_h = 220, 90
             box_x = min(mouse_x + 15, SIM_W - box_w - 10)
             box_y = min(mouse_y + 15, HEIGHT - box_h - 10)
-            pygame.draw.rect(
-                self.screen,
-                HOVER_PANEL_BG,
-                pygame.Rect(box_x, box_y, box_w, box_h),
-                border_radius=6,
-            )
-            pygame.draw.rect(
-                self.screen,
-                HOVER_BORDER,
-                pygame.Rect(box_x, box_y, box_w, box_h),
-                1,
-                border_radius=6,
-            )
-            draw_multiline(
-                self.screen,
-                sim.hovered_info(tooltip_node),
-                (box_x + 10, box_y + 10),
-                self.small_font,
-            )
+            pygame.draw.rect(self.screen, HOVER_PANEL_BG, pygame.Rect(box_x, box_y, box_w, box_h), border_radius=6)
+            pygame.draw.rect(self.screen, HOVER_BORDER, pygame.Rect(box_x, box_y, box_w, box_h), 1, border_radius=6)
+            draw_multiline(self.screen, sim.hovered_info(tooltip_node), (box_x + 10, box_y + 10), self.small_font)
+        else:
+            hovered_agent = sim.agent_at_position(mouse_pos)
+            if hovered_agent is not None:
+                mouse_x, mouse_y = pygame.mouse.get_pos()
+                agent_info = sim.hovered_agent_info(hovered_agent)
+                line_count = len(agent_info.splitlines())
+                box_w = 260
+                box_h = max(88, 20 + line_count * 20)
+                box_x = min(mouse_x + 15, SIM_W - box_w - 10)
+                box_y = min(mouse_y + 15, HEIGHT - box_h - 10)
+                pygame.draw.rect(self.screen, HOVER_PANEL_BG, pygame.Rect(box_x, box_y, box_w, box_h), border_radius=6)
+                pygame.draw.rect(self.screen, HOVER_BORDER, pygame.Rect(box_x, box_y, box_w, box_h), 1, border_radius=6)
+                draw_multiline(self.screen, agent_info, (box_x + 10, box_y + 10), self.small_font)
 
         hud_lines = [
             f"Agents: {len(sim.agents)}",
             f"People in park: {sum(a.group_size for a in sim.agents)}",
             f"Total entered: {sim.total_entered}",
             f"Total exited: {sim.total_exited}",
-            f"Agent speed: {DEFAULT_AGENT_SPEED:.0f}",
             f"Sim speed: {simulation_speed:.1f}x",
             f"Current step: {sim.current_time_step}",
-            f"Sim time: {sim.elapsed_sim_time:.1f}s",
+            f"Elapsed sim time: {sim.elapsed_sim_time:.1f} min",
             f"Cursor: ({mouse_pos[0]}, {mouse_pos[1]})",
         ]
         line_height = 24
         hud_y = HEIGHT - (line_height * len(hud_lines))
-
         for i, line in enumerate(hud_lines):
-            draw_text(
-                self.screen,
-                line,
-                (SIM_W + 15, hud_y + i * line_height),
-                self.small_font,
-            )
+            draw_text(self.screen, line, (SIM_W + 15, hud_y + i * line_height), self.small_font)
 
 
 class ControlPanel:
@@ -367,8 +357,15 @@ class ControlPanel:
     def __init__(self, ui_manager: pygame_gui.UIManager, sim: ThemeParkSim) -> None:
         """Create sliders, buttons, and labels for simulation controls."""
         self.ui_manager = ui_manager
+
+        # Set up value ranges for sliders
+        self.sim_speed_range = (0.1, 50.0)
+
         panel_x = SIM_W + 15
         y = 20
+        slider_w = 185
+        value_box_w = 87
+        slider_gap = 8
 
         self.title_label = pygame_gui.elements.UILabel(
             relative_rect=pygame.Rect((panel_x, y), (280, 30)),
@@ -382,20 +379,7 @@ class ControlPanel:
             text = "Time: 0900",
             manager = self.ui_manager,
         )
-        y+=40
-        self.agent_slider_label = pygame_gui.elements.UILabel(
-            relative_rect=pygame.Rect((panel_x, y), (280, 22)),
-            text="Agent count",
-            manager=self.ui_manager,
-        )
-        y += 25
-        self.agent_slider = pygame_gui.elements.UIHorizontalSlider(
-            relative_rect=pygame.Rect((panel_x, y), (280, 30)),
-            start_value=sim.agent_count,
-            value_range=(1, 80),
-            manager=self.ui_manager,
-        )
-        y += 55
+        y += 40
 
         self.sim_speed_label = pygame_gui.elements.UILabel(
             relative_rect=pygame.Rect((panel_x, y), (280, 22)),
@@ -404,11 +388,16 @@ class ControlPanel:
         )
         y += 25
         self.sim_speed_slider = pygame_gui.elements.UIHorizontalSlider(
-            relative_rect=pygame.Rect((panel_x, y), (280, 30)),
+            relative_rect=pygame.Rect((panel_x, y), (slider_w, 30)),
             start_value=1.0,
-            value_range=(0.2, 3.0),
+            value_range=self.sim_speed_range,
             manager=self.ui_manager,
         )
+        self.sim_speed_value_entry = pygame_gui.elements.UITextEntryLine(
+            relative_rect=pygame.Rect((panel_x + slider_w + slider_gap, y), (value_box_w, 30)),
+            manager=self.ui_manager,
+        )
+        self.sim_speed_value_entry.set_text("1.0")
         y += 70
 
         self.reset_button = pygame_gui.elements.UIButton(
@@ -436,6 +425,6 @@ class ControlPanel:
 
     def sync_from_sim(self, sim: ThemeParkSim, simulation_speed: float) -> None:
         """Sync widget values after simulation reset or model replacement."""
-        self.agent_slider.set_current_value(sim.agent_count)
         self.sim_speed_slider.set_current_value(simulation_speed)
+        self.sim_speed_value_entry.set_text(f"{simulation_speed:.1f}")
         self.pause_button.set_text("Resume" if sim.paused else "Pause")

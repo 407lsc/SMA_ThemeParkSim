@@ -6,8 +6,8 @@ from typing import Dict, List, Optional, Tuple
 
 import networkx as nx
 
-from .config import DEFAULT_AGENT_COLOR, DEFAULT_AGENT_SPEED
-from .models import Agent, EdgeData, EdgeKey, NodeData, Ride, Vec2
+from .config import SIM_TIME_MINUTES, SIM_TIME_STEPS, PARK_OPEN_TIME, PARK_CLOSE_TIME
+from .models import Agent, AdultAgent, ElderlyAgent, TeenagerAgent, GroupAgent, EdgeData, EdgeKey, NodeData, Ride, Vec2
 
 class ThemeParkSim:
     def __init__(self, agent_count: int = 15) -> None:
@@ -17,26 +17,40 @@ class ThemeParkSim:
         self.edge_data: Dict[EdgeKey, EdgeData] = {}
         self.agents: List[Agent] = []
         self.current_time_step: int = 0
-        self.elapsed_sim_time: float = 0.0
 
         self.agent_count = agent_count
         self.paused: bool = False
 
-        self.minutes_per_step: float = 0.1  # 1 step = 1 minute (you can tune this)
+        if SIM_TIME_STEPS <= 0:
+            raise ValueError("SIM_TIME_STEPS must be greater than 0")
+        if SIM_TIME_MINUTES <= 0:
+            raise ValueError("SIM_TIME_MINUTES must be greater than 0")
+
+        # Define simulation time mapping as:
+        # SIM_TIME_STEPS steps = SIM_TIME_MINUTES simulated minutes.
+        self.minutes_per_step: float = SIM_TIME_MINUTES / SIM_TIME_STEPS
         # Park time in minutes since midnight
-        self.park_open_time = 9 * 60    # 09:00
-        self.park_close_time = 12 * 60  # 12:00
+        self.park_open_time = PARK_OPEN_TIME
+        self.park_close_time = PARK_CLOSE_TIME
         self.park_is_closing = False
 
         self.total_entered = 0
         self.total_exited = 0
-
-        self.current_time_minutes: float = self.park_open_time
         self.initialise()
 
     @property
     def rides(self) -> list[str]:
         return [node for node, meta in self.node_data.items() if isinstance(meta, Ride)]
+
+    @property
+    def elapsed_sim_time(self) -> float:
+        """Elapsed simulated park time in minutes since opening."""
+        return self.current_time_step * self.minutes_per_step
+
+    @property
+    def current_time_minutes(self) -> float:
+        """Current simulated clock time in minutes since midnight."""
+        return self.park_open_time + self.elapsed_sim_time
 
     def initialise(self) -> None:
         self._build_park()
@@ -57,8 +71,8 @@ class ThemeParkSim:
     def _random_visitor_type(self) -> str:
         # You can tune these weights if you want a different population mix
         return random.choices(
-            ["teenager", "adult", "elderly"],
-            weights=[0.3, 0.5, 0.2],
+            ["teenager", "adult", "elderly", "group"],
+            weights=[0.25, 0.40, 0.20, 0.15],
             k=1
         )[0]
 
@@ -77,6 +91,8 @@ class ThemeParkSim:
             k=1,
         )[0]
 
+    # Defines if visitor is individual or group
+    ## Called in add_agent() when spawning in a new agent
     def _random_group_size(self) -> int:
         # 70% chance individual, 30% chance group of size 2-7
         if random.random() < 0.7:
@@ -89,8 +105,15 @@ class ThemeParkSim:
         path = self.random_path(start)
         pos = self.positions[start]
 
-        group_size = self._random_group_size()
         visitor_type = self._random_visitor_type()
+
+        # Use your existing group size logic
+        group_size = self._random_group_size()
+
+        # If visitor type is group, enforce group_size >= 2
+        if visitor_type == "group" and group_size == 1:
+            group_size = random.randint(2, 7)
+
         queue_type = self._random_queue_type(group_size)
         planned_departure_time = self._sample_departure_time(visitor_type)
 
@@ -100,29 +123,31 @@ class ThemeParkSim:
             random.randint(30, 240),
         )
 
-        speed = DEFAULT_AGENT_SPEED
-        if visitor_type == "teenager":
-            speed *= 1.10
-        elif visitor_type == "elderly":
-            speed *= 0.80
-
-        agent = Agent(
+        shared_kwargs = dict(
             agent_id=agent_id,
-            speed=speed,
             color=random_color,
             path=path,
+            group_size=group_size,
+            queue_type=queue_type,
+            planned_departure_time=planned_departure_time,
             current_index=0,
             progress=0.0,
             pos=pos,
-            visitor_type=visitor_type,
-            group_size=group_size,
-            queue_type=queue_type,
             time_in_park=0.0,
-            planned_departure_time=planned_departure_time,
             is_exiting=False,
             has_left_park=False,
         )
+        if visitor_type == "teenager":
+            agent = TeenagerAgent(**shared_kwargs)
+        elif visitor_type == "elderly":
+            agent = ElderlyAgent(**shared_kwargs)
+        elif visitor_type == "group":
+            agent = GroupAgent(**shared_kwargs)
+        else:
+            agent = AdultAgent(**shared_kwargs)
+
         self.total_entered += agent.group_size
+
         self.agents.append(agent)
         self.refresh_agent_position(agent)
         self.agent_count = len(self.agents)
@@ -168,7 +193,6 @@ class ThemeParkSim:
                 radius=radius,
                 image_path=image_path,
             )
-
         self.node_data[node_id] = node
 
     def _build_park(self) -> None:
@@ -201,7 +225,16 @@ class ThemeParkSim:
             self.edge_data[edge.key] = edge
             self.graph.add_edge(u, v, length=edge.length, crowd=edge.crowd)
 
-    def random_path(self, start: str) -> list[str]:
+
+    # Agent runtime API (consumed by Agent in models.py via AgentRuntime):
+    # - random_path
+    # - refresh_agent_position
+    # - enter_edge
+    # - leave_edge
+    # - edge_length
+    # - node_data_for
+    def random_path(self, start: str) -> List[str]:
+        # Provide route planning for agent decisions/replanning.
         rides = self.rides
         target = random.choice(rides)
         if start == target:
@@ -217,6 +250,7 @@ class ThemeParkSim:
             agent.agent_id = i
 
     def refresh_agent_position(self, agent: Agent) -> None:
+        # Convert traversal state (edge + progress) into renderable coordinates.
         edge = agent.current_edge()
         if edge is None:
             agent.pos = self.positions[agent.path[-1]]
@@ -230,6 +264,7 @@ class ThemeParkSim:
         )
 
     def enter_edge(self, u: str, v: str, agent_id: int) -> None:
+        # Track edge occupancy when an agent starts traversing an edge.
         if not self.graph.has_edge(u, v):
             return
         key = EdgeData.canonical_key(u, v)
@@ -240,6 +275,7 @@ class ThemeParkSim:
         self.graph[u][v]["crowd"] = edge.crowd
 
     def leave_edge(self, u: str, v: str, agent_id: int) -> None:
+        # Track edge occupancy when an agent leaves an edge.
         if not self.graph.has_edge(u, v):
             return
         key = EdgeData.canonical_key(u, v)
@@ -250,6 +286,7 @@ class ThemeParkSim:
         self.graph[u][v]["crowd"] = edge.crowd
 
     def edge_length(self, u: str, v: str) -> float:
+        # Return edge travel length for movement updates.
         edge = self.edge_data.get(EdgeData.canonical_key(u, v))
         if edge is None:
             return 0.0
@@ -263,8 +300,6 @@ class ThemeParkSim:
             return
 
         self.current_time_step += 1
-        self.current_time_minutes += self.minutes_per_step
-        self.elapsed_sim_time += dt
 
         if self.current_time_minutes >= self.park_close_time:
             self._begin_park_closing()
@@ -275,8 +310,9 @@ class ThemeParkSim:
             agent.execute_step(dt, self)
 
         if self.park_is_closing:
-            if agent.state == "queuing":
-                agent.force_exit_from_queue(self)
+            for agent in self.agents:
+                if agent.state == "queuing":
+                    agent.force_exit_from_queue(self)
 
         # Remove agents who have left the park
         self.agents = [agent for agent in self.agents if not agent.has_left_park]
@@ -299,6 +335,37 @@ class ThemeParkSim:
             lines.append(f"Cycle Length: {meta.ride_duration_minutes} minutes")
             lines.append("Status: Running" if meta.is_running else "Status: Idle")
         return "\n".join(lines)
+
+    @staticmethod
+    def _format_hhmm(total_minutes: float) -> str:
+        minute_value = int(total_minutes)
+        hours = (minute_value // 60) % 24
+        minutes = minute_value % 60
+        return f"{hours:02d}:{minutes:02d}"
+
+    def agent_at_position(self, mouse_pos: Tuple[int, int], radius: int = 14) -> Optional[Agent]:
+        mx, my = mouse_pos
+        radius_sq = radius * radius
+        for agent in reversed(self.agents):
+            if agent.state in ("queuing", "on_ride"):
+                continue
+            ax, ay = agent.pos
+            if (mx - ax) ** 2 + (my - ay) ** 2 <= radius_sq:
+                return agent
+        return None
+
+    def hovered_agent_info(self, agent: Agent) -> str:
+        entry_time_minutes = self.current_time_minutes - agent.time_in_park
+        planned_departure_minutes = entry_time_minutes + agent.planned_departure_time
+
+        lines = [
+            f"Agent {agent.agent_id}",
+            f"Visitor Type: {agent.visitor_type}",
+            f"Planned Departure: {self._format_hhmm(planned_departure_minutes)}",
+        ]
+        if agent.group_size > 1:
+            lines.append(f"Group Size: {agent.group_size}")
+        return "\n".join(lines)
     
     def get_time_str(self) -> str:
         total_minutes = int(self.current_time_minutes)
@@ -312,7 +379,9 @@ class ThemeParkSim:
         if visitor_type == "teenager":
             mean_minutes = 180.0
         elif visitor_type == "elderly":
-            mean_minutes = 120.0
+            mean_minutes = 120.0        
+        elif visitor_type == "group":
+            mean_minutes = 130.0
         else:
             mean_minutes = 150.0
 
