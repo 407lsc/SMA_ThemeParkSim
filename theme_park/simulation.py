@@ -196,26 +196,30 @@ class ThemeParkSim:
         self.node_data[node_id] = node
 
     def _build_park(self) -> None:
-        self._add_node("entrance", 120, 400, "intersection", "Entrance")
-        self._add_node("n1", 300, 200, "intersection", "Crossroad A")
-        self._add_node("n2", 300, 600, "intersection", "Crossroad B")
-        self._add_node("ride1", 520, 180, "ride", "Roller Coaster", capacity=20, image_path="inputs/roller_coaster.png",ride_duration_steps=15,min_occupancy_ratio=0.80)
-        self._add_node("ride2", 560, 410, "ride", "Ferris Wheel", capacity=32, image_path = "inputs/Ferris_wheel.png", ride_duration_steps=20,min_occupancy_ratio=0.80)
-        self._add_node("ride3", 520, 650, "ride", "Log Flume", capacity=24, image_path = "inputs/Log_flume.png", ride_duration_steps=17, min_occupancy_ratio=0.80)
-        self._add_node("n3", 760, 240, "intersection", "Path East")
-        self._add_node("n4", 770, 560, "intersection", "Path East 2")
+        self._add_node("entrance", 120, 360, "intersection", "Entrance")
+        self._add_node("n1", 312, 490, "intersection", "Crossroad A")
+        self._add_node("n2", 227, 550, "intersection", "Crossroad B")
+        self._add_node("n3", 484, 724, "intersection", "Crossroad C")
+        self._add_node("n4", 744, 539, "intersection", "Crossroad D")
+        self._add_node("n5", 598, 445, "intersection", "Crossroad E")
+        self._add_node("ride1", 874, 381, "ride", "Log Flume", capacity=24, image_path="inputs/Log_flume.png",ride_duration_steps=17,min_occupancy_ratio=0.80)
+        self._add_node("ride2", 496, 373, "ride", "Ferris Wheel", capacity=32, image_path = "inputs/Ferris_wheel.png", ride_duration_steps=20,min_occupancy_ratio=0.80)
+        self._add_node("ride3", 562, 662, "ride", "Roller Coaster", capacity=20, image_path = "inputs/roller_coaster.png", ride_duration_steps=15, min_occupancy_ratio=0.80)
+        self._add_node("n6", 854, 271, "intersection", "Path East ")
+        self._add_node("n7", 932, 324, "intersection", "Path East 2")
 
         edges = [
             ("entrance", "n1"),
-            ("entrance", "n2"),
-            ("n1", "ride1"),
+            ("n1", "n2"),
             ("n1", "ride2"),
-            ("n2", "ride2"),
-            ("n2", "ride3"),
-            ("ride1", "n3"),
-            ("ride2", "n3"),
-            ("ride2", "n4"),
-            ("ride3", "n4")
+            ("n2", "n3"),
+            ("n3", "ride3"),
+            ("n4", "ride3"),
+            ("n4", "n5"),
+            ("n5", "ride2"),
+            ("n5", "n6"),
+            ("n6", "n7"),
+            ("n7", "ride1")
         ]
         for u, v in edges:
             x1, y1 = self.positions[u]
@@ -443,7 +447,14 @@ class ThemeParkSim:
             elif agent.state in ("moving", "stationary"):
                 agent.force_exit_from_queue(self)
     
-    
+    def update_edge_lengths(self) -> None:
+        for (u, v), edge in self.edge_data.items():
+            x1, y1 = self.positions[u]
+            x2, y2 = self.positions[v]
+            edge.length = math.dist((x1, y1), (x2, y2))
+
+            if self.graph.has_edge(u, v):
+                self.graph[u][v]["length"] = edge.length
     
     
     

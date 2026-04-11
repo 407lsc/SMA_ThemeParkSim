@@ -85,7 +85,7 @@ class ParkView:
         self.screen = screen
         self.font = font
         self.small_font = small_font
-        self.background = pygame.image.load("inputs/Theme_Park_Map.png").convert()
+        self.background = pygame.image.load("inputs/Theme_Park_Map (1).png").convert()
         self.background = pygame.transform.smoothscale(self.background, (SIM_W, HEIGHT))
 
     @staticmethod
@@ -165,7 +165,7 @@ class ParkView:
         dot_radius = 5
         dot_spacing = 0
         label_gap = 3
-        top_margin = 10
+        top_margin = 2
         row_gap = 6
         row_height = dot_radius * 2
 
@@ -282,7 +282,7 @@ class ParkView:
                 used_image = True
                 image_half_height = meta.image.get_height() // 2
 
-            if not used_image:
+            if not used_image and meta.kind=="ride":
                 pygame.draw.circle(self.screen, color, (int(x), int(y)), radius)
                 pygame.draw.circle(self.screen, (255, 255, 255), (int(x), int(y)), radius, 2)
 
