@@ -196,17 +196,17 @@ class ThemeParkSim:
         self.node_data[node_id] = node
 
     def _build_park(self) -> None:
-        self._add_node("entrance", 120, 360, "intersection", "Entrance")
-        self._add_node("n1", 312, 490, "intersection", "Crossroad A")
-        self._add_node("n2", 227, 550, "intersection", "Crossroad B")
-        self._add_node("n3", 484, 724, "intersection", "Crossroad C")
-        self._add_node("n4", 744, 539, "intersection", "Crossroad D")
-        self._add_node("n5", 598, 445, "intersection", "Crossroad E")
+        self._add_node("entrance", 120, 360, "intersection", "")
+        self._add_node("n1", 312, 490, "intersection", "")
+        self._add_node("n2", 227, 550, "intersection", "")
+        self._add_node("n3", 484, 724, "intersection", "")
+        self._add_node("n4", 744, 539, "intersection", "")
+        self._add_node("n5", 598, 445, "intersection", "")
         self._add_node("ride1", 874, 381, "ride", "Log Flume", capacity=24, image_path="inputs/Log_flume.png",ride_duration_steps=17,min_occupancy_ratio=0.80)
         self._add_node("ride2", 496, 373, "ride", "Ferris Wheel", capacity=32, image_path = "inputs/Ferris_wheel.png", ride_duration_steps=20,min_occupancy_ratio=0.80)
         self._add_node("ride3", 562, 662, "ride", "Roller Coaster", capacity=20, image_path = "inputs/roller_coaster.png", ride_duration_steps=15, min_occupancy_ratio=0.80)
-        self._add_node("n6", 854, 271, "intersection", "Path East ")
-        self._add_node("n7", 932, 324, "intersection", "Path East 2")
+        self._add_node("n6", 854, 271, "intersection", "")
+        self._add_node("n7", 932, 324, "intersection", "")
 
         edges = [
             ("entrance", "n1"),
