@@ -72,9 +72,9 @@ class NodeData:
                 else:
                     img = pygame.image.load(str(full_path)).convert_alpha()
 
-                    # 🔥 Bigger sizing logic
+                    #  Bigger sizing logic
                     if kind == "ride":
-                        size = 120   # 👈 adjust this (80–120 recommended)
+                        size = 180
                     else:
                         size = 40   # smaller for intersections
 

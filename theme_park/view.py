@@ -29,9 +29,22 @@ def draw_text(
     pos: Tuple[int, int],
     font: pygame.font.Font,
     color=TEXT_COLOR,
+    center: bool = False,
+    background: Optional[Tuple[int, int, int]] = None,
 ) -> None:
-    img = font.render(text, True, color)
-    surface.blit(img, pos)
+    """Draw a single line of text.
+
+    Args:
+        center: if True, position is treated as center instead of top-left
+        background: optional background color for readability
+    """
+    img = font.render(text, True, color, background)
+
+    if center:
+        rect = img.get_rect(center=pos)
+        surface.blit(img, rect)
+    else:
+        surface.blit(img, pos)
 
 
 def draw_multiline(
@@ -41,11 +54,26 @@ def draw_multiline(
     font: pygame.font.Font,
     color=TEXT_COLOR,
     line_gap: int = 4,
+    center: bool = False,
+    background: Optional[Tuple[int, int, int]] = None,
 ) -> None:
+    """Draw multiple lines of text.
+
+    Args:
+        center: horizontally centers each line around pos[0]
+        background: optional background color for readability
+    """
     x, y = pos
+
     for line in text.splitlines():
-        img = font.render(line, True, color)
-        surface.blit(img, (x, y))
+        img = font.render(line, True, color, background)
+
+        if center:
+            rect = img.get_rect(center=(x, y + img.get_height() // 2))
+            surface.blit(img, rect)
+        else:
+            surface.blit(img, (x, y))
+
         y += img.get_height() + line_gap
 
 
@@ -57,6 +85,8 @@ class ParkView:
         self.screen = screen
         self.font = font
         self.small_font = small_font
+        self.background = pygame.image.load("inputs/Theme_Park_Map (1).png").convert()
+        self.background = pygame.transform.smoothscale(self.background, (SIM_W, HEIGHT))
 
     @staticmethod
     def _agent_color_map(sim: ThemeParkSim) -> Dict[int, Tuple[int, int, int]]:
@@ -135,7 +165,7 @@ class ParkView:
         dot_radius = 5
         dot_spacing = 0
         label_gap = 3
-        top_margin = 10
+        top_margin = 2
         row_gap = 6
         row_height = dot_radius * 2
 
@@ -228,7 +258,7 @@ class ParkView:
         mouse_pos: Tuple[int, int],
     ) -> None:
         """Draw the full frame: map, nodes, agents, tooltip, and sidebar stats."""
-        self.screen.fill(BG)
+        self.screen.blit(self.background, (0,0))
         pygame.draw.rect(self.screen, PANEL_BG, pygame.Rect(SIM_W, 0, PANEL_W, HEIGHT))
 
         for u, v in sim.graph.edges():
@@ -252,7 +282,7 @@ class ParkView:
                 used_image = True
                 image_half_height = meta.image.get_height() // 2
 
-            if not used_image:
+            if not used_image and meta.kind=="ride":
                 pygame.draw.circle(self.screen, color, (int(x), int(y)), radius)
                 pygame.draw.circle(self.screen, (255, 255, 255), (int(x), int(y)), radius, 2)
 
