@@ -237,12 +237,37 @@ class ThemeParkSim:
     # - leave_edge
     # - edge_length
     # - node_data_for
-    def random_path(self, start: str) -> List[str]:
-        # Provide route planning for agent decisions/replanning.
+    def random_path(self, start: str, ride_preferences: Optional[Dict[str, float]] = None) -> List[str]:
         rides = self.rides
-        target = random.choice(rides)
-        if start == target:
-            target = random.choice([r for r in rides if r != start])
+
+        if ride_preferences is not None:
+            # Filter preferences to only rides that exist in the current park
+            valid_prefs = {r: ride_preferences[r] for r in rides if r in ride_preferences}
+
+            if valid_prefs:
+                # Fall back to uniform if all weights sum to zero
+                ride_ids = list(valid_prefs.keys())
+                weights = list(valid_prefs.values())
+                target = random.choices(ride_ids, weights=weights, k=1)[0]
+            else:
+                target = random.choice(rides)
+        else:
+            target = random.choice(rides)
+
+        # Avoid picking the ride the agent is already at
+        if start == target and len(rides) > 1:
+            remaining = [r for r in rides if r != start]
+            if ride_preferences is not None:
+                valid_prefs = {r: ride_preferences[r] for r in remaining if r in ride_preferences}
+                if valid_prefs:
+                    ride_ids = list(valid_prefs.keys())
+                    weights = list(valid_prefs.values())
+                    target = random.choices(ride_ids, weights=weights, k=1)[0]
+                else:
+                    target = random.choice(remaining)
+            else:
+                target = random.choice(remaining)
+
         try:
             return nx.shortest_path(self.graph, start, target, weight="length")
         except nx.NetworkXNoPath:
