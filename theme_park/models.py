@@ -19,6 +19,8 @@ AgentState = Literal["stationary", "moving", "queuing", "on_ride"]
 class AgentRuntime(Protocol):
     """Runtime services exposed by the simulation to each agent behavior."""
 
+    minutes_per_step: float
+
     def edge_length(self, u: NodeId, v: NodeId) -> float:
         ...
 
@@ -38,6 +40,9 @@ class AgentRuntime(Protocol):
         ...
 
     def path_to_entrance(self, start: NodeId) -> Path:
+        ...
+
+    def remove_agent(self, agent: "Agent") -> None:
         ...
 
 
@@ -418,6 +423,10 @@ class Agent:
         self.has_arrived = False
         self._occupied_edge: Optional[EdgeKey] = None
 
+        # Metrics tracked per agent lifecycle.
+        self.rides_completed: int = 0
+        self.queue_time_minutes: float = 0.0
+
     @property
     def is_group(self) -> bool:
         return self.group_size > 1
@@ -566,6 +575,9 @@ class Agent:
         """Queued agents wait until boarded, unless they are exiting."""
         self._leave_current_edge(runtime)
 
+        # Count waiting time while the agent is in queue state.
+        self.queue_time_minutes += runtime.minutes_per_step
+
         # Closing override: leave queue immediately
         if self.is_exiting:
             current_node = self._current_node_id()
@@ -596,6 +608,8 @@ class Agent:
             return
 
         if node.is_released_from_queue(self.agent_id):
+            # A ride visit counts only when the ride finishes and releases agent.
+            self.rides_completed += 1
             start = self._current_node_id()
             if self.is_exiting:
                 self.replan_path(runtime.path_to_entrance(start))

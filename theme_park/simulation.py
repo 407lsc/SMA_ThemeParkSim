@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import math
 import random
+import matplotlib.pyplot as plt
 from typing import Dict, List, Optional, Tuple
 
 import networkx as nx
@@ -19,11 +20,12 @@ from .config import (
     GLOBAL_FASTPASS_WEIGHT,
     GLOBAL_NORMAL_WEIGHT,
     GLOBAL_SINGLE_RIDER_WEIGHT,
+    METRICS_COLLECT_INTERVAL
 )
 from .models import Agent, AdultAgent, ElderlyAgent, TeenagerAgent, GroupAgent, EdgeData, EdgeKey, NodeData, Ride, Vec2
 
 class ThemeParkSim:
-    def __init__(self, agent_count: int = 15) -> None:
+    def __init__(self) -> None:
         self.graph = nx.Graph()
         self.positions: Dict[str, Vec2] = {}
         self.node_data: Dict[str, NodeData] = {}
@@ -31,7 +33,7 @@ class ThemeParkSim:
         self.agents: List[Agent] = []
         self.current_time_step: int = 0
 
-        self.agent_count = agent_count
+        self.agent_count = 0
         self.paused: bool = False
 
         if SIM_TIME_STEPS <= 0:
@@ -66,6 +68,17 @@ class ThemeParkSim:
         )
         if not configured_ok:
             self.set_queue_ratio_weights(0.20, 0.60, 0.20)
+
+        # Metrics collection
+        self.metrics_collect_interval_s = METRICS_COLLECT_INTERVAL
+        self.metrics_collect_interval_steps = max(1, int(self.metrics_collect_interval_s / self.minutes_per_step))
+        self.metrics_timesteps: List[int] = []
+        self.metrics_avg_visitor_density: List[float] = []
+        self.metrics_avg_num_rides_visited: List[float] = []
+        self.metrics_avg_queue_time: List[float] = []
+        self._metrics_departed_agents_count: int = 0
+        self._metrics_departed_total_rides_completed: float = 0.0
+        self._metrics_departed_total_queue_time: float = 0.0
 
         self.initialise()
 
@@ -223,8 +236,39 @@ class ThemeParkSim:
 
     def remove_agent(self, agent: Agent) -> None:
         self.total_exited += agent.group_size
+
+        # Finalize per-agent metrics when agent leaves the park.
+        self._metrics_departed_agents_count += 1
+        self._metrics_departed_total_rides_completed += float(agent.rides_completed)
+        self._metrics_departed_total_queue_time += float(agent.queue_time_minutes)
+
         if agent in self.agents:
             self.agents.remove(agent)
+
+    def _current_avg_visitor_density(self) -> float:
+        if not self.edge_data:
+            return 0.0
+        densities: list[float] = []
+        for edge in self.edge_data.values():
+            if edge.length <= 0:
+                densities.append(0.0)
+            else:
+                densities.append(edge.crowd / edge.length)
+        return sum(densities) / len(densities)
+
+    def _collect_metrics_snapshot(self) -> None:
+        self.metrics_timesteps.append(self.current_time_step)
+        self.metrics_avg_visitor_density.append(self._current_avg_visitor_density())
+
+        if self._metrics_departed_agents_count > 0:
+            avg_rides = self._metrics_departed_total_rides_completed / self._metrics_departed_agents_count
+            avg_queue_time = self._metrics_departed_total_queue_time / self._metrics_departed_agents_count
+        else:
+            avg_rides = 0.0
+            avg_queue_time = 0.0
+
+        self.metrics_avg_num_rides_visited.append(avg_rides)
+        self.metrics_avg_queue_time.append(avg_queue_time)
 
     def _add_node(
         self,
@@ -417,6 +461,14 @@ class ThemeParkSim:
         self.agents = [agent for agent in self.agents if not agent.has_left_park]
         self.agent_count = len(self.agents)
 
+        # Auto-stop once closing has started and everyone has exited.
+        if self.park_is_closing and self.agent_count == 0:
+            self.paused = True
+            self.output_metrics()
+
+        if self.current_time_step % self.metrics_collect_interval_steps == 0:
+            self._collect_metrics_snapshot()
+
     def node_at_position(self, mouse_pos: Tuple[int, int], radius: int = 80) -> Optional[str]:
         mx, my = mouse_pos
         for node_id, (x, y) in self.positions.items():
@@ -550,6 +602,8 @@ class ThemeParkSim:
 
             if self.graph.has_edge(u, v):
                 self.graph[u][v]["length"] = edge.length
-    
+
+    def output_metrics(self) -> None:
+        pass
     
     

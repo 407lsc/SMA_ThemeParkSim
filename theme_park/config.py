@@ -51,6 +51,11 @@ INDIVIDUAL_VISITOR_TYPE_WEIGHTS = {
 GROUP_SIZE_MIN = 2
 GROUP_SIZE_MAX = 7
 
+# ==================
+# Metrics collection
+# ==================
+METRICS_COLLECT_INTERVAL = 1 # Collect metrics every N simulated minutes
+
 # ================
 # Parameter tuning
 # ================

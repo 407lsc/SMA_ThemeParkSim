@@ -261,6 +261,18 @@ class ParkView:
         self.screen.blit(self.background, (0,0))
         pygame.draw.rect(self.screen, PANEL_BG, pygame.Rect(SIM_W, 0, PANEL_W, HEIGHT))
 
+        # Add banner to indicate park is closed once closing time is reached
+        if sim.park_is_closing:
+            closed_font = pygame.font.Font(None, 42)
+            closed_text = closed_font.render("Park Closed", True, (190, 35, 35))
+            closed_rect = closed_text.get_rect(center=(SIM_W // 2, 28))
+
+            backdrop_rect = closed_rect.inflate(26, 14)
+            backdrop_surface = pygame.Surface(backdrop_rect.size, pygame.SRCALPHA)
+            pygame.draw.rect(backdrop_surface, (0, 0, 0, 165), backdrop_surface.get_rect(), border_radius=10)
+            self.screen.blit(backdrop_surface, backdrop_rect.topleft)
+            self.screen.blit(closed_text, closed_rect)
+
         for u, v in sim.graph.edges():
             x1, y1 = sim.positions[u]
             x2, y2 = sim.positions[v]

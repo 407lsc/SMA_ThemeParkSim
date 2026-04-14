@@ -231,6 +231,9 @@ class App:
             self.tooltip_node = None
 
         self._commit_blurred_text_entries()
+        self.control_panel.pause_button.set_text(
+            "Resume" if self.sim.paused else "Pause"
+        )
         self.control_panel.clock_label.set_text(
             f"Time: {self.sim.get_time_str()}"
         )
