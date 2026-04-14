@@ -6,7 +6,20 @@ from typing import Dict, List, Optional, Tuple
 
 import networkx as nx
 
-from .config import SIM_TIME_MINUTES, SIM_TIME_STEPS, PARK_OPEN_TIME, PARK_CLOSE_TIME
+from .config import (
+    SIM_TIME_MINUTES,
+    SIM_TIME_STEPS,
+    PARK_OPEN_TIME,
+    PARK_CLOSE_TIME,
+    AGENT_SPAWN_PROB,
+    GROUP_SPAWN_PROB,
+    INDIVIDUAL_VISITOR_TYPE_WEIGHTS,
+    GROUP_SIZE_MIN,
+    GROUP_SIZE_MAX,
+    GLOBAL_FASTPASS_WEIGHT,
+    GLOBAL_NORMAL_WEIGHT,
+    GLOBAL_SINGLE_RIDER_WEIGHT,
+)
 from .models import Agent, AdultAgent, ElderlyAgent, TeenagerAgent, GroupAgent, EdgeData, EdgeKey, NodeData, Ride, Vec2
 
 class ThemeParkSim:
@@ -36,6 +49,24 @@ class ThemeParkSim:
 
         self.total_entered = 0
         self.total_exited = 0
+
+        self.group_spawn_prob = min(max(GROUP_SPAWN_PROB, 0.0), 1.0)
+        self.individual_type_weights = INDIVIDUAL_VISITOR_TYPE_WEIGHTS
+        if GROUP_SIZE_MIN < 2 or GROUP_SIZE_MAX < GROUP_SIZE_MIN:
+            raise ValueError("GROUP_SIZE_MIN/GROUP_SIZE_MAX configuration is invalid")
+        self.group_size_min = GROUP_SIZE_MIN
+        self.group_size_max = GROUP_SIZE_MAX
+
+        # Queue mix is driven by global queue targets from config.
+        # If config is invalid, fall back to defaults in code.
+        configured_ok = self.set_queue_ratio_weights(
+            GLOBAL_FASTPASS_WEIGHT,
+            GLOBAL_NORMAL_WEIGHT,
+            GLOBAL_SINGLE_RIDER_WEIGHT,
+        )
+        if not configured_ok:
+            self.set_queue_ratio_weights(0.20, 0.60, 0.20)
+
         self.initialise()
 
     @property
@@ -54,7 +85,6 @@ class ThemeParkSim:
 
     def initialise(self) -> None:
         self._build_park()
-        # self._spawn_initial_agents(self.agent_count)
 
     def execute_step(self, dt: float) -> None:
         _ = dt
@@ -65,39 +95,77 @@ class ThemeParkSim:
 
         # Do not admit new agents after closing starts
         if not self.park_is_closing:
-            if random.random() > 0.95:
+
+            # Spawn new agent
+            if random.random() > AGENT_SPAWN_PROB:
                 self.add_agent()
 
     def _random_visitor_type(self) -> str:
-        # You can tune these weights if you want a different population mix
+        # Choose individual visitor type only (group handled separately).
         return random.choices(
-            ["teenager", "adult", "elderly", "group"],
-            weights=[0.25, 0.40, 0.20, 0.15],
+            list(self.individual_type_weights.keys()),
+            weights=list(self.individual_type_weights.values()),
             k=1
         )[0]
 
-    def _random_queue_type(self,group_size:int) -> str:
-        # Only true solo visitors can become single riders.
+    def _random_queue_type(self, group_size: int) -> str:
         if group_size == 1:
             return random.choices(
                 ["fastpass", "normal", "single_rider"],
-                weights=[0.20, 0.60, 0.20],
+                weights=[
+                    self.single_fastpass_weight,
+                    self.single_normal_weight,
+                    self.single_rider_weight,
+                ],
                 k=1,
             )[0]
 
         return random.choices(
             ["fastpass", "normal"],
-            weights=[0.20, 0.80],
+            weights=[self.group_fastpass_weight, self.group_normal_weight],
             k=1,
         )[0]
+
+    def _recompute_group_queue_weights(self) -> None:
+        # Preserve fastpass share approximately at global level (by people)
+        # while single-rider remains available only to solo visitors.
+        expected_group_size = (self.group_size_min + self.group_size_max) / 2
+        denom = self.group_spawn_prob * expected_group_size
+        if denom > 0:
+            total_people_per_spawn = (1.0 - self.group_spawn_prob) + denom
+            group_fastpass_weight = (
+                self.single_fastpass_weight * total_people_per_spawn
+                - (1.0 - self.group_spawn_prob) * self.single_fastpass_weight
+            ) / denom
+        else:
+            group_fastpass_weight = self.single_fastpass_weight
+
+        group_fastpass_weight = min(max(group_fastpass_weight, 0.0), 1.0)
+        self.group_fastpass_weight = group_fastpass_weight
+        self.group_normal_weight = 1.0 - group_fastpass_weight
+
+    def set_queue_ratio_weights(self, fastpass: float, normal: float, single_rider: float) -> bool:
+        # Valid iff non-negative, normal > 0, and total sums to 1.
+        weight_sum = fastpass + normal + single_rider
+        is_valid = (
+            fastpass >= 0.0
+            and normal > 0.0
+            and single_rider >= 0.0
+            and abs(weight_sum - 1.0) < 1e-9
+        )
+        if not is_valid:
+            return False
+
+        self.single_fastpass_weight = fastpass
+        self.single_normal_weight = normal
+        self.single_rider_weight = single_rider
+        self._recompute_group_queue_weights()
+        return True
 
     # Defines if visitor is individual or group
     ## Called in add_agent() when spawning in a new agent
     def _random_group_size(self) -> int:
-        # 70% chance individual, 30% chance group of size 2-7
-        if random.random() < 0.7:
-            return 1
-        return random.randint(2, 7)
+        return random.randint(self.group_size_min, self.group_size_max)
 
     def add_agent(self) -> Agent:
         agent_id = len(self.agents)
@@ -105,14 +173,14 @@ class ThemeParkSim:
         path = self.random_path(start)
         pos = self.positions[start]
 
-        visitor_type = self._random_visitor_type()
-
-        # Use your existing group size logic
-        group_size = self._random_group_size()
-
-        # If visitor type is group, enforce group_size >= 2
-        if visitor_type == "group" and group_size == 1:
-            group_size = random.randint(2, 7)
+        # 1) First choose whether this spawn is a group or individual.
+        if random.random() < self.group_spawn_prob:
+            visitor_type = "group"
+            group_size = self._random_group_size()
+        else:
+            # 2) Individual spawn: choose adult/teenager/elderly.
+            visitor_type = self._random_visitor_type()
+            group_size = 1
 
         queue_type = self._random_queue_type(group_size)
         planned_departure_time = self._sample_departure_time(visitor_type)
@@ -165,6 +233,7 @@ class ThemeParkSim:
         y: float,
         kind: str,
         name: str,
+        max_capacity: int = 30,
         capacity: int = 0,
         color: Optional[Tuple[int, int, int]] = None,
         radius: Optional[int] = None,
@@ -178,6 +247,7 @@ class ThemeParkSim:
         if kind == "ride":
             node = Ride(
                 name=name,
+                max_capacity=max_capacity,
                 capacity=capacity,
                 color=color,
                 radius=radius,
@@ -202,9 +272,9 @@ class ThemeParkSim:
         self._add_node("n3", 484, 724, "intersection", "")
         self._add_node("n4", 744, 539, "intersection", "")
         self._add_node("n5", 598, 445, "intersection", "")
-        self._add_node("ride1", 874, 381, "ride", "Log Flume", capacity=24, image_path="inputs/Log_flume.png",ride_duration_steps=17,min_occupancy_ratio=0.80)
-        self._add_node("ride2", 496, 373, "ride", "Ferris Wheel", capacity=32, image_path = "inputs/Ferris_wheel.png", ride_duration_steps=20,min_occupancy_ratio=0.80)
-        self._add_node("ride3", 562, 662, "ride", "Roller Coaster", capacity=20, image_path = "inputs/roller_coaster.png", ride_duration_steps=15, min_occupancy_ratio=0.80)
+        self._add_node("ride1", 874, 381, "ride", "Log Flume", max_capacity=30, capacity=24, image_path="inputs/Log_flume.png",ride_duration_steps=17,min_occupancy_ratio=0.80)
+        self._add_node("ride2", 496, 373, "ride", "Ferris Wheel", max_capacity=100, capacity=32, image_path = "inputs/Ferris_wheel.png", ride_duration_steps=20,min_occupancy_ratio=0.80)
+        self._add_node("ride3", 562, 662, "ride", "Roller Coaster", max_capacity=30, capacity=20, image_path = "inputs/roller_coaster.png", ride_duration_steps=15, min_occupancy_ratio=0.80)
         self._add_node("n6", 854, 271, "intersection", "")
         self._add_node("n7", 932, 324, "intersection", "")
 

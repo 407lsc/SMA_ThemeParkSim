@@ -30,7 +30,7 @@ class App:
         self.tooltip_node: Optional[str] = None
         self.mouse_pos: Tuple[int, int] = (0, 0)
 
-        self.ui_manager = pygame_gui.UIManager((WIDTH, HEIGHT))
+        self.ui_manager = pygame_gui.UIManager((WIDTH, HEIGHT), "inputs/ui_theme.json")
         self.control_panel = ControlPanel(self.ui_manager, self.sim)
         self.view = ParkView(self.screen, self.font, self.small_font)
         self._dirty_text_entries: set[pygame_gui.elements.UITextEntryLine] = set()
@@ -103,6 +103,11 @@ class App:
             self._apply_sim_speed(clamped)
             return
 
+        queue_entries = self.control_panel.queue_ratio_entries
+        if ui_element in queue_entries.values():
+            # Queue ratio entries are applied only through confirm button.
+            return
+
         for node_id, entry in self.control_panel.ride_capacity_entries.items():
             if ui_element != entry:
                 continue
@@ -124,7 +129,26 @@ class App:
             return
 
     def _handle_text_entry_event(self, event) -> None:
+        if event.ui_element in self.control_panel.queue_ratio_entries.values():
+            return
         self._apply_text_entry_value(event.ui_element, event.text)
+
+    def _apply_queue_ratio_entries(self) -> None:
+        entries = self.control_panel.queue_ratio_entries
+        try:
+            fastpass = float(entries["fastpass"].get_text().strip())
+            normal = float(entries["normal"].get_text().strip())
+            single_rider = float(entries["single_rider"].get_text().strip())
+        except (ValueError, KeyError):
+            # Invalid input: revert all three to current simulation values.
+            self.control_panel.sync_from_sim(self.sim, self.simulation_speed)
+            return
+
+        updated = self.sim.set_queue_ratio_weights(fastpass, normal, single_rider)
+        # Repaint fields from authoritative sim values (updated or reverted).
+        self.control_panel.sync_from_sim(self.sim, self.simulation_speed)
+        if not updated:
+            return
 
     def _commit_blurred_text_entries(self) -> None:
         tracked_entries = [
@@ -149,6 +173,11 @@ class App:
             self.add_agent()
         elif event.ui_element == self.control_panel.pause_button:
             self.toggle_pause()
+        elif event.ui_element == self.control_panel.queue_ratio_confirm_button:
+            self._apply_queue_ratio_entries()
+        elif event.ui_element == self.control_panel.parametertuning_button:
+            # Placeholder for future parameter tuning functionality.
+            pass
 
     def handle_events(self) -> None:
         for event in pygame.event.get():
@@ -224,5 +253,8 @@ class App:
         self.control_panel.pause_button.set_text(
             "Resume" if self.sim.paused else "Pause"
         )
+
+    def toggle_parameter_tuning(self) -> None:
+        self.toggle_pause()
 
         

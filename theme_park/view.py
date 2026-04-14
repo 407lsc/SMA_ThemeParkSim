@@ -363,6 +363,7 @@ class ControlPanel:
     def __init__(self, ui_manager: pygame_gui.UIManager, sim: ThemeParkSim) -> None:
         """Create sliders, buttons, and labels for simulation controls."""
         self.ui_manager = ui_manager
+        self.queue_ratio_entries: dict[str, pygame_gui.elements.UITextEntryLine] = {}
         self.ride_capacity_entries: dict[str, pygame_gui.elements.UITextEntryLine] = {}
 
         # Set up value ranges for sliders
@@ -412,6 +413,43 @@ class ControlPanel:
 
         y += 50
 
+        self.queue_ratio_title = pygame_gui.elements.UILabel(
+            relative_rect=pygame.Rect((panel_x, y), (280, 22)),
+            text="Pass ratios (add up to 1)",
+            manager=self.ui_manager,
+        )
+        self._set_label_text_black(self.queue_ratio_title)
+        y += 26
+
+        queue_rows = [
+            ("Fast Pass (>= 0)", "fastpass", sim.single_fastpass_weight),
+            ("Normal (> 0)", "normal", sim.single_normal_weight),
+            ("Single Rider (>= 0)", "single_rider", sim.single_rider_weight),
+        ]
+        for label, key, value in queue_rows:
+            row_label = pygame_gui.elements.UILabel(
+                relative_rect=pygame.Rect((panel_x, y), (188, 22)),
+                text=label,
+                manager=self.ui_manager,
+            )
+            self._set_label_text_black(row_label)
+            entry = pygame_gui.elements.UITextEntryLine(
+                relative_rect=pygame.Rect((panel_x + 196, y), (84, 22)),
+                manager=self.ui_manager,
+            )
+            entry.set_text(f"{value:.2f}")
+            self.queue_ratio_entries[key] = entry
+            _ = row_label
+            y += 28
+
+        self.queue_ratio_confirm_button = pygame_gui.elements.UIButton(
+            relative_rect=pygame.Rect((panel_x, y), (280, 30)),
+            text="Confirm",
+            manager=self.ui_manager,
+        )
+
+        y += 44
+
         self.ride_capacity_title = pygame_gui.elements.UILabel(
             relative_rect=pygame.Rect((panel_x, y), (280, 22)),
             text="Ride capacities",
@@ -444,18 +482,24 @@ class ControlPanel:
         y += 22
 
         self.reset_button = pygame_gui.elements.UIButton(
-            relative_rect=pygame.Rect((panel_x, y), (85, 35)),
+            relative_rect=pygame.Rect((panel_x, y), (90, 35)),
             text="Reset",
             manager=self.ui_manager,
         )
         self.add_agent_button = pygame_gui.elements.UIButton(
-            relative_rect=pygame.Rect((panel_x + 97, y), (85, 35)),
+            relative_rect=pygame.Rect((panel_x + 94.5, y), (90, 35)),
             text="Add Agent",
             manager=self.ui_manager,
         )
         self.pause_button = pygame_gui.elements.UIButton(
-            relative_rect=pygame.Rect((panel_x + 194, y), (85, 35)),
+            relative_rect=pygame.Rect((panel_x + 189, y), (90, 35)),
             text="Pause",
+            manager=self.ui_manager,
+        )
+
+        self.parametertuning_button = pygame_gui.elements.UIButton(
+            relative_rect=pygame.Rect((panel_x, y + 45), (280, 35)),
+            text="Parameter Tuning",
             manager=self.ui_manager,
         )
 
@@ -464,6 +508,13 @@ class ControlPanel:
         self.sim_speed_slider.set_current_value(simulation_speed)
         self.sim_speed_value_entry.set_text(f"{simulation_speed:.1f}")
         self.pause_button.set_text("Resume" if sim.paused else "Pause")
+
+        if "fastpass" in self.queue_ratio_entries:
+            self.queue_ratio_entries["fastpass"].set_text(f"{sim.single_fastpass_weight:.2f}")
+        if "normal" in self.queue_ratio_entries:
+            self.queue_ratio_entries["normal"].set_text(f"{sim.single_normal_weight:.2f}")
+        if "single_rider" in self.queue_ratio_entries:
+            self.queue_ratio_entries["single_rider"].set_text(f"{sim.single_rider_weight:.2f}")
 
         for node_id, entry in self.ride_capacity_entries.items():
             meta = sim.node_data.get(node_id)

@@ -89,6 +89,7 @@ class Ride(NodeData):
     def __init__(
         self,
         name: str,
+        max_capacity: int = 30, # for parameter tuning purposes only
         capacity: int = 0,
         color: Optional[RGBColor] = None,
         radius: Optional[int] = None,
@@ -104,6 +105,7 @@ class Ride(NodeData):
             image_path=image_path,
         )
 
+        self.max_capacity = max_capacity # for parameter tuning purposes only
         self.capacity = capacity
         self.ride_duration_minutes = ride_duration_steps
         self.min_occupancy_ratio = min_occupancy_ratio
