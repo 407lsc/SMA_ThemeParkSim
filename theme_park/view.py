@@ -165,7 +165,7 @@ class ParkView:
         dot_radius = 5
         dot_spacing = 0
         label_gap = 3
-        top_margin = 2
+        top_margin = -10 # Distance between ride node and queue visualisation
         row_gap = 6
         row_height = dot_radius * 2
 
@@ -354,9 +354,16 @@ class ParkView:
 class ControlPanel:
     """Define and manage the pygame_gui control widgets in the sidebar."""
 
+    @staticmethod
+    def _set_label_text_black(label: pygame_gui.elements.UILabel) -> None:
+        label.text_colour = pygame.Color("#000000")
+        label.disabled_text_colour = pygame.Color("#000000")
+        label.rebuild()
+
     def __init__(self, ui_manager: pygame_gui.UIManager, sim: ThemeParkSim) -> None:
         """Create sliders, buttons, and labels for simulation controls."""
         self.ui_manager = ui_manager
+        self.ride_capacity_entries: dict[str, pygame_gui.elements.UITextEntryLine] = {}
 
         # Set up value ranges for sliders
         self.sim_speed_range = (0.1, 50.0)
@@ -367,18 +374,20 @@ class ControlPanel:
         value_box_w = 87
         slider_gap = 8
 
-        self.title_label = pygame_gui.elements.UILabel(
-            relative_rect=pygame.Rect((panel_x, y), (280, 30)),
-            text="Controls",
-            manager=self.ui_manager,
-        )
-        y += 50
-
         self.clock_label = pygame_gui.elements.UILabel(
             relative_rect=pygame.Rect((panel_x,y), (280,30)),
             text = "Time: 0900",
             manager = self.ui_manager,
         )
+        self._set_label_text_black(self.clock_label)
+        y += 50
+
+        self.title_label = pygame_gui.elements.UILabel(
+            relative_rect=pygame.Rect((panel_x, y), (280, 30)),
+            text="Controls:",
+            manager=self.ui_manager,
+        )
+        self._set_label_text_black(self.title_label)
         y += 40
 
         self.sim_speed_label = pygame_gui.elements.UILabel(
@@ -386,11 +395,13 @@ class ControlPanel:
             text="Simulation speed",
             manager=self.ui_manager,
         )
+        self._set_label_text_black(self.sim_speed_label)
         y += 25
         self.sim_speed_slider = pygame_gui.elements.UIHorizontalSlider(
             relative_rect=pygame.Rect((panel_x, y), (slider_w, 30)),
             start_value=1.0,
             value_range=self.sim_speed_range,
+            click_increment=0.1,
             manager=self.ui_manager,
         )
         self.sim_speed_value_entry = pygame_gui.elements.UITextEntryLine(
@@ -398,7 +409,39 @@ class ControlPanel:
             manager=self.ui_manager,
         )
         self.sim_speed_value_entry.set_text("1.0")
-        y += 70
+
+        y += 50
+
+        self.ride_capacity_title = pygame_gui.elements.UILabel(
+            relative_rect=pygame.Rect((panel_x, y), (280, 22)),
+            text="Ride capacities",
+            manager=self.ui_manager,
+        )
+        self._set_label_text_black(self.ride_capacity_title)
+        y += 26
+
+        for node_id, meta in sim.node_data.items():
+            if not isinstance(meta, Ride):
+                continue
+
+            row_label = pygame_gui.elements.UILabel(
+                relative_rect=pygame.Rect((panel_x, y), (188, 22)),
+                text=meta.name,
+                manager=self.ui_manager,
+            )
+            self._set_label_text_black(row_label)
+            entry = pygame_gui.elements.UITextEntryLine(
+                relative_rect=pygame.Rect((panel_x + 196, y), (84, 22)),
+                manager=self.ui_manager,
+            )
+            entry.set_text(str(meta.capacity))
+            self.ride_capacity_entries[node_id] = entry
+
+            # Keep label widgets alive via pygame_gui references and layout order.
+            _ = row_label
+            y += 28
+
+        y += 22
 
         self.reset_button = pygame_gui.elements.UIButton(
             relative_rect=pygame.Rect((panel_x, y), (85, 35)),
@@ -415,16 +458,14 @@ class ControlPanel:
             text="Pause",
             manager=self.ui_manager,
         )
-        y += 60
-
-        self.info_label = pygame_gui.elements.UILabel(
-            relative_rect=pygame.Rect((panel_x, y), (280, 22)),
-            text="Hover a ride to see info",
-            manager=self.ui_manager,
-        )
 
     def sync_from_sim(self, sim: ThemeParkSim, simulation_speed: float) -> None:
         """Sync widget values after simulation reset or model replacement."""
         self.sim_speed_slider.set_current_value(simulation_speed)
         self.sim_speed_value_entry.set_text(f"{simulation_speed:.1f}")
         self.pause_button.set_text("Resume" if sim.paused else "Pause")
+
+        for node_id, entry in self.ride_capacity_entries.items():
+            meta = sim.node_data.get(node_id)
+            if isinstance(meta, Ride):
+                entry.set_text(str(meta.capacity))

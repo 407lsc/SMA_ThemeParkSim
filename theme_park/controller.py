@@ -6,6 +6,7 @@ import pygame
 import pygame_gui
 
 from .config import FPS, HEIGHT, SIM_W, WIDTH
+from .models import Ride
 from .simulation import ThemeParkSim
 from .view import ControlPanel, ParkView
 
@@ -32,6 +33,7 @@ class App:
         self.ui_manager = pygame_gui.UIManager((WIDTH, HEIGHT))
         self.control_panel = ControlPanel(self.ui_manager, self.sim)
         self.view = ParkView(self.screen, self.font, self.small_font)
+        self._dirty_text_entries: set[pygame_gui.elements.UITextEntryLine] = set()
 
     def reset_sim(self) -> None:
         self.sim = ThemeParkSim()
@@ -66,6 +68,14 @@ class App:
             if not rect.collidepoint(mouse_pos):
                 continue
 
+            # Let arrow buttons use slider click_increment behavior.
+            arrow_w = getattr(slider, "arrow_button_width", 0)
+            if arrow_w > 0:
+                if mouse_pos[0] <= rect.left + arrow_w:
+                    return
+                if mouse_pos[0] >= rect.right - arrow_w:
+                    return
+
             ratio = (mouse_pos[0] - rect.left) / max(1, rect.width)
             ratio = self._clamp(ratio, 0.0, 1.0)
             raw_value = min_v + ratio * (max_v - min_v)
@@ -80,10 +90,10 @@ class App:
         if event.ui_element == self.control_panel.sim_speed_slider:
             self._apply_sim_speed(float(event.value))
 
-    def _handle_text_entry_event(self, event) -> None:
-        if event.ui_element == self.control_panel.sim_speed_value_entry:
+    def _apply_text_entry_value(self, ui_element, text: str) -> None:
+        if ui_element == self.control_panel.sim_speed_value_entry:
             try:
-                entered = float(event.text.strip())
+                entered = float(text.strip())
             except ValueError:
                 self.control_panel.sim_speed_value_entry.set_text(f"{self.simulation_speed:.1f}")
                 return
@@ -91,6 +101,45 @@ class App:
             clamped = self._clamp(entered, min_v, max_v)
             self.control_panel.sim_speed_slider.set_current_value(clamped)
             self._apply_sim_speed(clamped)
+            return
+
+        for node_id, entry in self.control_panel.ride_capacity_entries.items():
+            if ui_element != entry:
+                continue
+
+            meta = self.sim.node_data.get(node_id)
+            if not isinstance(meta, Ride):
+                entry.set_text(text.strip())
+                return
+
+            try:
+                entered_capacity = int(text.strip())
+            except ValueError:
+                entry.set_text(str(meta.capacity))
+                return
+
+            updated_capacity = max(1, entered_capacity)
+            meta.capacity = updated_capacity
+            entry.set_text(str(updated_capacity))
+            return
+
+    def _handle_text_entry_event(self, event) -> None:
+        self._apply_text_entry_value(event.ui_element, event.text)
+
+    def _commit_blurred_text_entries(self) -> None:
+        tracked_entries = [
+            self.control_panel.sim_speed_value_entry,
+            *self.control_panel.ride_capacity_entries.values(),
+        ]
+
+        for entry in tracked_entries:
+            if entry not in self._dirty_text_entries:
+                continue
+            if entry.is_focused:
+                continue
+
+            self._apply_text_entry_value(entry, entry.get_text())
+            self._dirty_text_entries.discard(entry)
 
     """Logic for handling button press events"""
     def _handle_button_event(self, event) -> None:
@@ -120,6 +169,11 @@ class App:
                 self._handle_button_event(event)
             elif event.type == pygame_gui.UI_TEXT_ENTRY_FINISHED:
                 self._handle_text_entry_event(event)
+                if hasattr(event, "ui_element"):
+                    self._dirty_text_entries.discard(event.ui_element)
+            elif event.type == pygame_gui.UI_TEXT_ENTRY_CHANGED:
+                if hasattr(event, "ui_element"):
+                    self._dirty_text_entries.add(event.ui_element)
 
     def update(self, dt: float) -> None:
         self.ui_manager.update(dt)
@@ -147,10 +201,7 @@ class App:
         else:
             self.tooltip_node = None
 
-        if self.tooltip_node is not None:
-            self.control_panel.info_label.set_text(self.sim.hovered_info(self.tooltip_node).replace("\n", " | "))
-        else:
-            self.control_panel.info_label.set_text("Hover a ride to see info")
+        self._commit_blurred_text_entries()
         self.control_panel.clock_label.set_text(
             f"Time: {self.sim.get_time_str()}"
         )

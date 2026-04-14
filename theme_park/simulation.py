@@ -322,7 +322,7 @@ class ThemeParkSim:
         self.agents = [agent for agent in self.agents if not agent.has_left_park]
         self.agent_count = len(self.agents)
 
-    def node_at_position(self, mouse_pos: Tuple[int, int], radius: int = 18) -> Optional[str]:
+    def node_at_position(self, mouse_pos: Tuple[int, int], radius: int = 80) -> Optional[str]:
         mx, my = mouse_pos
         for node_id, (x, y) in self.positions.items():
             if (mx - x) ** 2 + (my - y) ** 2 <= radius ** 2:
