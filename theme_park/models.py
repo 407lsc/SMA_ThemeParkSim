@@ -28,7 +28,7 @@ class AgentRuntime(Protocol):
     def leave_edge(self, u: NodeId, v: NodeId, agent_id: AgentId) -> None:
         ...
 
-    def random_path(self, start: NodeId) -> Path:
+    def random_path(self, start: NodeId, ride_preferences: Optional[Dict[str, float]] = None) -> Path:
         ...
 
     def node_data_for(self, node_id: NodeId) -> "NodeData":
@@ -491,7 +491,7 @@ class Agent:
         if self.is_exiting:
             self.replan_path(runtime.path_to_entrance(start))
         else:
-            self.replan_path(runtime.random_path(start))
+            self.replan_path(runtime.random_path(start, getattr(self.__class__, "ride_preferences", None)))
 
         self.state = "moving"
         runtime.refresh_agent_position(self)
@@ -515,7 +515,7 @@ class Agent:
             if self.is_exiting:
                 self.replan_path(runtime.path_to_entrance(current_node))
             else:
-                self.replan_path(runtime.random_path(current_node))
+                self.replan_path(runtime.random_path(current_node, getattr(self.__class__, "ride_preferences", None)))
 
             runtime.refresh_agent_position(self)
             return
@@ -596,7 +596,7 @@ class Agent:
             if self.is_exiting:
                 self.replan_path(runtime.path_to_entrance(start))
             else:
-                self.replan_path(runtime.random_path(start))
+                self.replan_path(runtime.random_path(start, getattr(self.__class__, "ride_preferences", None)))
             self.state = "moving"
 
         runtime.refresh_agent_position(self)
@@ -640,6 +640,12 @@ class Agent:
 class TeenagerAgent(Agent):
     """Fast-moving solo or group visitor with a longer average stay."""
 
+    ride_preferences = {
+        "ride1": 0.15,  # Log Flume — low interest
+        "ride2": 0.20,  # Ferris Wheel — moderate
+        "ride3": 0.65,  # Roller Coaster — high interest
+    }
+
     def __init__(
         self,
         agent_id: int,
@@ -666,6 +672,12 @@ class TeenagerAgent(Agent):
 
 class AdultAgent(Agent):
     """Average-speed visitor, most common in the park."""
+
+    ride_preferences = {
+        "ride1": 0.30,  # Log Flume
+        "ride2": 0.40,  # Ferris Wheel
+        "ride3": 0.30,  # Roller Coaster
+    }
 
     def __init__(
         self,
@@ -694,6 +706,12 @@ class AdultAgent(Agent):
 class ElderlyAgent(Agent):
     """Slower-moving visitor with a shorter average stay."""
 
+    ride_preferences = {
+        "ride1": 0.30,  # Log Flume 
+        "ride2": 0.60,  # Ferris Wheel — most preferred
+        "ride3": 0.10,  # Roller Coaster — rarely chosen
+    }
+
     def __init__(
         self,
         agent_id: int,
@@ -719,6 +737,12 @@ class ElderlyAgent(Agent):
 
 class GroupAgent(Agent):
     """Visitors arriving as a group with unique dynamics."""
+
+    ride_preferences = {
+        "ride1": 0.25,  # Log Flume
+        "ride2": 0.35,  # Ferris Wheel
+        "ride3": 0.40,  # Roller Coaster — groups like thrills
+    }
 
     def __init__(
         self,
