@@ -534,6 +534,7 @@ class Agent:
 
             arrived = self.path[self.current_index]
             node = runtime.node_data_for(arrived)
+            reached_path_destination = self.current_edge() is None
 
             if self.is_exiting and arrived == "entrance":
                 self.has_left_park = True
@@ -541,7 +542,8 @@ class Agent:
                 self._finalize_exit(runtime)
                 return
 
-            if isinstance(node, Ride) and not self.is_exiting:
+            # If reached node is a ride, and it is the correct ride, attempt to join queue
+            if isinstance(node, Ride) and not self.is_exiting and reached_path_destination:
                 self.previous_destinations.append(arrived)
                 should_queue = node.join_queue(
                     self.agent_id,
