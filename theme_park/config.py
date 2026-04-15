@@ -18,10 +18,10 @@ HOVER_BORDER = (30, 30, 30)
 TEXT_COLOR = (25, 25, 25)
 PANEL_BG = (235, 238, 242)
 DEFAULT_AGENT_COLOR = (40, 40, 40)
-DISABLE_GRAPHICS = True  # Set True to disable all graphic updates (for headless/batch runs)
+DISABLE_GRAPHICS = False  # Set True to disable all graphic updates (for headless/batch runs)
 
 # Technical simulation settings
-RANDOM_SEED = 42
+RANDOM_SEED = 42 # For reproducibility of random events (e.g. visitor generation)
 
 # Simulation clock mapping:
 # SIM_TIME_STEPS steps correspond to SIM_TIME_MINUTES simulated minutes.
@@ -71,7 +71,9 @@ CAPACITY_TUNING_STEP = 10
 PASS_TYPE_TUNING_STEP = 0.1
 OUTPUT_DIR = "output"
 
-# ==================
-# DO NOT TOUCH BELOW
-# ==================
+
+
+
+
+# X X X DO NOT TOUCH BELOW X X X 
 DEFAULT_AGENT_SPEED_PX = DEFAULT_AGENT_SPEED_M * SIM_DISTANCE_PIXELS / SIM_DISTANCE_METERS

@@ -53,6 +53,9 @@ class App:
         self.view = ParkView(self.screen, self.font, self.small_font)
         self._dirty_text_entries: set[pygame_gui.elements.UITextEntryLine] = set()
 
+        # Ensure initial UI reflects configured startup state.
+        self.control_panel.sync_from_sim(self.sim, self.simulation_speed)
+
         # Parameter tuning (base wiring)
         self.tuning_capacity_options: dict[str, list[int]] = {}
         self.tuning_pass_weight_options: list[tuple[float, float, float]] = []
@@ -88,15 +91,33 @@ class App:
         out_dir.mkdir(parents=True, exist_ok=True)
         return out_dir / f"parameter_tuning_result_{datetime.now().strftime('%Y-%m-%d_%H-%M-%S')}.csv"
 
+    def _draw_tuning_progress(self, completed: int, total: int) -> None:
+        # Intentionally draw only a blank background + progress message.
+        self.screen.fill((0, 0, 0))
+        text = f"Tuning parameters... {completed}/{total}"
+        progress_font = pygame.font.Font(None, 40)
+        text_surface = progress_font.render(text, True, (240, 240, 240))
+        text_rect = text_surface.get_rect(center=(WIDTH // 2, HEIGHT // 2))
+        self.screen.blit(text_surface, text_rect)
+        pygame.display.flip()
+
+    @staticmethod
+    def _safe_average(values: list[float]) -> float:
+        if not values:
+            return 0.0
+        return float(sum(values) / len(values))
+
     def _write_parameter_tuning_csv(
         self,
         capacity_options: dict[str, list[int]],
         pass_options: list[tuple[float, float, float]],
+        total_configs: int,
     ) -> Path:
-        """Write all parameter tuning combinations to CSV.
+        """Run all tuning configurations and write per-run results to CSV.
 
         Columns:
-        run_id, <ride_name>_cap..., fast_pass_weight, normal_weight, single_rider_weight
+        run_id, <ride_name>_cap..., fast_pass_weight, normal_weight, single_rider_weight,
+        final_total_profit, avg_avg_visitor_density, avg_avg_num_rides_visited, avg_avg_queue_time
         """
         csv_path = self._parameter_tuning_csv_path()
 
@@ -119,26 +140,100 @@ class App:
             "fast_pass_weight",
             "normal_weight",
             "single_rider_weight",
+            "final_total_profit",
+            "avg_avg_visitor_density",
+            "avg_avg_num_rides_visited",
+            "avg_avg_queue_time",
         ]
 
+        # Show initial progress state before any run starts.
+        self._draw_tuning_progress(0, total_configs)
+
+        simulated_seconds_per_step = self.sim.minutes_per_step * 60.0
         run_id = 0
+        # Create/truncate file and write header once.
         with csv_path.open("w", newline="") as f:
             writer = csv.writer(f)
             writer.writerow(header)
 
-            # Stream the cartesian product to disk (avoid huge in-memory matrices).
-            for ride_capacities, (fastpass, normal, single_rider) in self.sim.iter_parameter_tuning_configs(
-                CAPACITY_TUNING_STEP,
-                PASS_TYPE_TUNING_STEP,
-            ):
-                run_id += 1
-                row: list[object] = [run_id]
-                for _col, node_id in ride_cols:
-                    row.append(ride_capacities[node_id])
-                row.extend([fastpass, normal, single_rider])
+        # Run + stream results row-by-row to avoid huge memory usage.
+        for ride_capacities, (fastpass, normal, single_rider) in self.sim.iter_parameter_tuning_configs(
+            CAPACITY_TUNING_STEP,
+            PASS_TYPE_TUNING_STEP,
+        ):
+            for event in pygame.event.get([pygame.QUIT]):
+                if event.type == pygame.QUIT:
+                    self.running = False
+                    break
+            if not self.running:
+                break
+
+            run_sim = ThemeParkSim()
+            run_sim.enable_final_output_metrics = False
+
+            # Apply ride capacities for this run.
+            for node_id, tuned_capacity in ride_capacities.items():
+                meta = run_sim.node_data.get(node_id)
+                if isinstance(meta, Ride):
+                    meta.capacity = int(tuned_capacity)
+
+            # Apply pass mix for this run.
+            if not run_sim.set_queue_ratio_weights(fastpass, normal, single_rider):
+                continue
+
+            inner_step_count = 0
+            while not run_sim.paused:
+                run_sim.step(simulated_seconds_per_step)
+                inner_step_count += 1
+
+                # Keep OS window/event loop responsive during long headless runs.
+                if inner_step_count % 120 == 0:
+                    for event in pygame.event.get([pygame.QUIT]):
+                        if event.type == pygame.QUIT:
+                            self.running = False
+                            break
+                    if not self.running:
+                        break
+
+            if not self.running:
+                break
+
+            final_total_profit = (
+                run_sim.metrics_total_profit[-1]
+                if run_sim.metrics_total_profit
+                else sum(
+                    meta.total_profit
+                    for meta in run_sim.node_data.values()
+                    if isinstance(meta, Ride)
+                )
+            )
+            avg_avg_visitor_density = self._safe_average(run_sim.metrics_avg_visitor_density)
+            avg_avg_num_rides_visited = self._safe_average(run_sim.metrics_avg_num_rides_visited)
+            avg_avg_queue_time = self._safe_average(run_sim.metrics_avg_queue_time)
+
+            run_id += 1
+            row: list[object] = [run_id]
+            for _col, node_id in ride_cols:
+                row.append(ride_capacities[node_id])
+            row.extend([
+                fastpass,
+                normal,
+                single_rider,
+                final_total_profit,
+                avg_avg_visitor_density,
+                avg_avg_num_rides_visited,
+                avg_avg_queue_time,
+            ])
+
+            # Append one completed run row, then close the file immediately.
+            with csv_path.open("a", newline="") as f:
+                writer = csv.writer(f)
                 writer.writerow(row)
 
-        print(f"- CSV written: {csv_path} ({run_id} rows)")
+            # Update progress only after each completed simulation.
+            self._draw_tuning_progress(run_id, total_configs)
+
+        print(f"- CSV written: {csv_path} ({run_id} completed runs)")
         return csv_path
 
     def _setup_parameter_tuning_grid(self) -> None:
@@ -181,8 +276,8 @@ class App:
         print(f"- Pass combos (F,N,S_fixed): {len(pass_options)}")
         print(f"- Total configs (capacity x pass): {total_configs}")
 
-        # Export all combinations to CSV
-        self._write_parameter_tuning_csv(capacity_options, pass_options)
+        # Run all tuning combinations and export per-run results to CSV.
+        self._write_parameter_tuning_csv(capacity_options, pass_options, total_configs)
 
     @staticmethod
     def _clamp(value: float, min_value: float, max_value: float) -> float:
