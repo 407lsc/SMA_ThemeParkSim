@@ -6,7 +6,17 @@ from typing import Optional, Tuple
 import pygame
 import pygame_gui
 
-from .config import DEFAULT_AGENT_SPEED_PX, FPS, HEIGHT, SIM_W, WIDTH
+from .config import (
+    CAPACITY_TUNING_STEP,
+    DEFAULT_AGENT_SPEED_PX,
+    DEFAULT_SIMULATION_SPEED,
+    DISABLE_GRAPHICS,
+    FPS,
+    HEIGHT,
+    PASS_TYPE_TUNING_STEP,
+    SIM_W,
+    WIDTH,
+)
 from .models import Ride
 from .simulation import ThemeParkSim
 from .view import ControlPanel, ParkView
@@ -24,7 +34,7 @@ class App:
         self.small_font = pygame.font.Font(None, 18)
 
         self.sim = ThemeParkSim()
-        self.simulation_speed = 1.0
+        self.simulation_speed = DEFAULT_SIMULATION_SPEED
         self._step_accumulator = 0.0
         self._max_steps_hard_cap = 400
         self._max_frame_dt_for_steps = 0.1
@@ -38,14 +48,63 @@ class App:
         self.view = ParkView(self.screen, self.font, self.small_font)
         self._dirty_text_entries: set[pygame_gui.elements.UITextEntryLine] = set()
 
+        # Parameter tuning (base wiring)
+        self.tuning_capacity_options: dict[str, list[int]] = {}
+        self.tuning_pass_weight_options: list[tuple[float, float, float]] = []
+        self.tuning_total_config_count: int = 0
+        self.tuning_config_iter = None
+
     def reset_sim(self) -> None:
         self.sim = ThemeParkSim()
-        self.control_panel.sync_from_sim(self.sim, 1.0)
-        self.simulation_speed = 1.0
+        self.control_panel.sync_from_sim(self.sim, DEFAULT_SIMULATION_SPEED)
+        self.simulation_speed = DEFAULT_SIMULATION_SPEED
         self._step_accumulator = 0.0
 
     def add_agent(self) -> None:
         self.sim.add_agent()
+
+    def _stop_current_simulation(self) -> None:
+        # For now, "stop" means: pause + prevent any catch-up steps.
+        self.sim.paused = True
+        self._step_accumulator = 0.0
+        self.control_panel.sync_from_sim(self.sim, self.simulation_speed)
+
+    def _setup_parameter_tuning_grid(self) -> None:
+        self._stop_current_simulation()
+
+        try:
+            capacity_options = self.sim.capacity_tuning_options(CAPACITY_TUNING_STEP)
+            pass_options = self.sim.pass_weight_tuning_options(PASS_TYPE_TUNING_STEP)
+        except ValueError as exc:
+            print(f"\n[Parameter Tuning] Invalid tuning configuration: {exc}")
+            return
+
+        total_capacity_combos = 1
+        for values in capacity_options.values():
+            total_capacity_combos *= max(1, len(values))
+        total_configs = total_capacity_combos * max(1, len(pass_options))
+
+        self.tuning_capacity_options = capacity_options
+        self.tuning_pass_weight_options = pass_options
+        self.tuning_total_config_count = total_configs
+        self.tuning_config_iter = self.sim.iter_parameter_tuning_configs(
+            CAPACITY_TUNING_STEP,
+            PASS_TYPE_TUNING_STEP,
+        )
+
+        # Console summary (base functionality)
+        print("\n[Parameter Tuning] Grid generated")
+        print(f"- Capacity step: {CAPACITY_TUNING_STEP}")
+        for node_id, values in capacity_options.items():
+            meta = self.sim.node_data.get(node_id)
+            ride_name = meta.name if isinstance(meta, Ride) else node_id
+            if values:
+                print(f"  - {ride_name}: {values[0]}..{values[-1]} ({len(values)} values)")
+            else:
+                print(f"  - {ride_name}: (no values)")
+        print(f"- Pass step: {PASS_TYPE_TUNING_STEP}")
+        print(f"- Pass combos (F,N,S): {len(pass_options)}")
+        print(f"- Total configs (capacity x pass): {total_configs}")
 
     @staticmethod
     def _clamp(value: float, min_value: float, max_value: float) -> float:
@@ -201,8 +260,7 @@ class App:
         elif event.ui_element == self.control_panel.queue_ratio_confirm_button:
             self._apply_queue_ratio_entries()
         elif event.ui_element == self.control_panel.parametertuning_button:
-            # Placeholder for future parameter tuning functionality.
-            pass
+            self._setup_parameter_tuning_grid()
 
     def handle_events(self) -> None:
         for event in pygame.event.get():
@@ -272,6 +330,8 @@ class App:
         )
 
     def draw(self) -> None:
+        if DISABLE_GRAPHICS:
+            return
         self.view.draw(self.sim, self.simulation_speed, self.tooltip_node, self.mouse_pos)
         self.ui_manager.draw_ui(self.screen)
         pygame.display.flip()

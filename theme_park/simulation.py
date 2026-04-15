@@ -3,6 +3,7 @@ from __future__ import annotations
 import math
 import random
 import matplotlib.pyplot as plt
+from itertools import product
 from typing import Dict, List, Optional, Tuple
 
 import networkx as nx
@@ -20,7 +21,9 @@ from .config import (
     GLOBAL_FASTPASS_WEIGHT,
     GLOBAL_NORMAL_WEIGHT,
     GLOBAL_SINGLE_RIDER_WEIGHT,
-    METRICS_COLLECT_INTERVAL
+    METRICS_COLLECT_INTERVAL,
+    CAPACITY_TUNING_STEP,
+    PASS_TYPE_TUNING_STEP,
 )
 from .models import Agent, AdultAgent, ElderlyAgent, TeenagerAgent, GroupAgent, EdgeData, EdgeKey, NodeData, Ride, Vec2
 
@@ -124,7 +127,7 @@ class ThemeParkSim:
         )[0]
 
     def _random_queue_type(self, group_size: int) -> str:
-        if group_size == 1:
+        if group_size == 1: # If it is not a group (single visitor)
             return random.choices(
                 ["fastpass", "normal", "single_rider"],
                 weights=[
@@ -160,12 +163,15 @@ class ThemeParkSim:
         self.group_normal_weight = 1.0 - group_fastpass_weight
 
     def set_queue_ratio_weights(self, fastpass: float, normal: float, single_rider: float) -> bool:
-        # Valid iff non-negative, normal > 0, and total sums to 1.
+        # Valid iff fastpass is capped, others are non-negative as required,
+        # normal > 0, and total sums to 1.
         weight_sum = fastpass + normal + single_rider
         is_valid = (
             fastpass >= 0.0
+            and fastpass <= 0.5
             and normal > 0.0
             and single_rider >= 0.0
+            and single_rider <= 0.5
             and abs(weight_sum - 1.0) < 1e-9
         )
         if not is_valid:
@@ -638,5 +644,108 @@ class ThemeParkSim:
         plt.tight_layout()
         plt.show()
         plt.close()
+
+    # ==================
+    # Parameter tuning
+    # ==================
+    @staticmethod
+    def _capacity_values(max_capacity: int, step: int) -> list[int]:
+        step = max(1, int(step))
+        max_capacity = int(max_capacity)
+        if max_capacity <= 0:
+            return []
+
+        values = list(range(step, max_capacity + 1, step))
+        if not values:
+            values = [max_capacity]
+        elif values[-1] != max_capacity:
+            values.append(max_capacity)
+
+        # Unique + sorted
+        return sorted(set(values))
+
+    def capacity_tuning_options(self, step: Optional[int] = None) -> dict[str, list[int]]:
+        """Return possible capacity values for each ride node_id.
+
+        Values are generated from the tuning step up to each ride's max_capacity,
+        always including max_capacity.
+        """
+        step_value = CAPACITY_TUNING_STEP if step is None else step
+        options: dict[str, list[int]] = {}
+        for node_id, meta in self.node_data.items():
+            if not isinstance(meta, Ride):
+                continue
+            options[node_id] = self._capacity_values(meta.max_capacity, int(step_value))
+        return options
+
+    @staticmethod
+    def pass_weight_tuning_options(step: Optional[float] = None) -> list[tuple[float, float, float]]:
+        """Return all (fastpass, normal, single_rider) triples on a fixed step grid.
+
+        Constraints:
+        - 0 <= fastpass <= 0.5
+        - 0 <= single_rider <= 0.5
+        - normal > 0
+        - fastpass + normal + single_rider == 1
+
+        Notes:
+        - Uses integer units to avoid float drift.
+        - Requires that 1.0 is an integer multiple of step.
+        """
+        step_value = PASS_TYPE_TUNING_STEP if step is None else float(step)
+        if step_value <= 0:
+            raise ValueError("PASS_TYPE_TUNING_STEP must be > 0")
+
+        denom = round(1.0 / step_value)
+        if denom <= 0 or abs(denom * step_value - 1.0) > 1e-9:
+            raise ValueError(
+                "PASS_TYPE_TUNING_STEP must evenly divide 1.0 (e.g. 0.05, 0.1, 0.25)"
+            )
+
+        combos: list[tuple[float, float, float]] = []
+        for fast_units in range(0, denom + 1):
+            max_single_units = denom - fast_units
+            # normal_units must be >= 1 (strictly > 0)
+            for single_units in range(0, max_single_units + 1):
+                normal_units = denom - fast_units - single_units
+                if normal_units <= 0:
+                    continue
+
+                fastpass = fast_units * step_value
+                if fastpass > 0.5 + 1e-9:
+                    continue
+
+                normal = normal_units * step_value
+                single_rider = single_units * step_value
+                if single_rider > 0.5 + 1e-9:
+                    continue
+
+                combos.append((fastpass, normal, single_rider))
+
+        return combos
+
+    def iter_parameter_tuning_configs(
+        self,
+        capacity_step: Optional[int] = None,
+        pass_step: Optional[float] = None,
+    ):
+        """Yield (ride_capacities, pass_weights) for the full parameter grid.
+
+        This is a lazy generator to avoid building huge in-memory matrices.
+        - ride_capacities: dict[node_id, capacity]
+        - pass_weights: (fastpass, normal, single_rider)
+        """
+        capacity_options = self.capacity_tuning_options(capacity_step)
+        pass_options = self.pass_weight_tuning_options(pass_step)
+
+        ride_ids = list(capacity_options.keys())
+        if not ride_ids:
+            return
+
+        capacity_lists = [capacity_options[r] for r in ride_ids]
+        for capacity_tuple in product(*capacity_lists):
+            ride_capacities = dict(zip(ride_ids, capacity_tuple))
+            for pass_weights in pass_options:
+                yield ride_capacities, pass_weights
     
     
