@@ -18,7 +18,7 @@ HOVER_BORDER = (30, 30, 30)
 TEXT_COLOR = (25, 25, 25)
 PANEL_BG = (235, 238, 242)
 DEFAULT_AGENT_COLOR = (40, 40, 40)
-DISABLE_GRAPHICS = False  # Set True to disable all graphic updates (for headless/batch runs)
+DISABLE_GRAPHICS = True  # Set True to disable all graphic updates (for headless/batch runs)
 
 # Technical simulation settings
 RANDOM_SEED = 42
@@ -36,7 +36,7 @@ SIM_DISTANCE_METERS = 1.0
 # ===================
 # Simulation settings
 # ===================
-AGENT_SPAWN_PROB = 0.10 # Probability of at least one spawn over 1 simulated second (when park is open)
+AGENT_SPAWN_PROB = 0.05 # Probability of at least one spawn over 1 simulated second (when park is open)
 PARK_OPEN_TIME = 9 * 60  # 9:00 AM in minutes
 PARK_CLOSE_TIME = 21 * 60  # 9:00 PM in minutes
 DEFAULT_AGENT_SPEED_M = 1.58  # Meters per second

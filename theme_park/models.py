@@ -101,6 +101,10 @@ class Ride(NodeData):
         image_path: Optional[str] = None,
         ride_duration_steps: int = 60,
         min_occupancy_ratio: float = 0.80,
+        operation_cost_base_per_cycle: float = 100.0,
+        operation_cost_per_capacity_unit: float = 2.0,
+        fastpass_price_per_ride: float = 10.0,
+        standard_price_per_ride: float = 7.0,
     ) -> None:
         super().__init__(
             kind="ride",
@@ -114,6 +118,18 @@ class Ride(NodeData):
         self.capacity = capacity
         self.ride_duration_minutes = ride_duration_steps
         self.min_occupancy_ratio = min_occupancy_ratio
+        self.operation_cost_base_per_cycle = max(0.0, float(operation_cost_base_per_cycle))
+        self.operation_cost_per_capacity_unit = max(0.0, float(operation_cost_per_capacity_unit))
+        self.fastpass_price_per_ride = max(0.0, float(fastpass_price_per_ride))
+        self.standard_price_per_ride = max(0.0, float(standard_price_per_ride))
+
+        # Financial tracking for this ride.
+        self.total_cycles_started: int = 0
+        self.total_boarded_customers: int = 0
+        self.total_revenue: float = 0.0
+        self.total_operation_cost: float = 0.0
+        self.total_fastpass_customers: int = 0
+        self.total_standard_customers: int = 0
 
         # Each queue entry is (agent_id, group_size, queue_type)
         self.single_rider_queue: Queue[tuple[AgentId, int, str]] = Queue()
@@ -125,7 +141,7 @@ class Ride(NodeData):
         self._released_agent_ids: set[AgentId] = set()
 
         self._on_ride_agents: list[tuple[AgentId, int, str]] = []
-        self._ride_end_time: Optional[int] = None
+        self._ride_end_time: Optional[float] = None
         self.ride_duration_minutes = ride_duration_steps
 
     def is_ride(self) -> bool:
@@ -152,6 +168,16 @@ class Ride(NodeData):
         if self.capacity <= 0:
             return 0
         return max(1, int(self.capacity * self.min_occupancy_ratio + 0.999999))
+
+    @property
+    def operation_cost_per_cycle(self) -> float:
+        return self.operation_cost_base_per_cycle + (
+            max(self.capacity, 0) * self.operation_cost_per_capacity_unit
+        )
+
+    @property
+    def total_profit(self) -> float:
+        return self.total_revenue - self.total_operation_cost
 
     @staticmethod
     def _queue_people_count(queue: Queue[tuple[AgentId, int, str]]) -> int:
@@ -240,6 +266,31 @@ class Ride(NodeData):
                 self.normal_queue.queue.appendleft(entry)
             self._queued_agent_ids.add(agent_id)
 
+    def _price_for_queue_type(self, queue_type: str) -> float:
+        if queue_type == "fastpass":
+            return self.fastpass_price_per_ride
+        return self.standard_price_per_ride
+
+    def _apply_cycle_financials(self, boarded_groups: list[tuple[AgentId, int, str]]) -> None:
+        if not boarded_groups:
+            return
+
+        boarded_people = 0
+        cycle_revenue = 0.0
+
+        for _agent_id, group_size, queue_type in boarded_groups:
+            boarded_people += group_size
+            cycle_revenue += self._price_for_queue_type(queue_type) * group_size
+            if queue_type == "fastpass":
+                self.total_fastpass_customers += group_size
+            else:
+                self.total_standard_customers += group_size
+
+        self.total_cycles_started += 1
+        self.total_boarded_customers += boarded_people
+        self.total_revenue += cycle_revenue
+        self.total_operation_cost += self.operation_cost_per_cycle
+
     def process_queues(self, current_time_minutes: float, park_is_closing: bool = False) -> None:
         # If a ride is already running, let it finish.
         if self._ride_end_time is not None:
@@ -281,6 +332,7 @@ class Ride(NodeData):
         boarded_people = sum(group_size for _, group_size, _ in boarded_groups)
 
         if boarded_people >= self.minimum_required_riders:
+            self._apply_cycle_financials(boarded_groups)
             self._on_ride_agents = boarded_groups
             self._ride_end_time = current_time_minutes + self.ride_duration_minutes
         else:

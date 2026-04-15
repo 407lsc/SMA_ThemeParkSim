@@ -81,6 +81,9 @@ class ThemeParkSim:
         self.metrics_avg_visitor_density: List[float] = []
         self.metrics_avg_num_rides_visited: List[float] = []
         self.metrics_avg_queue_time: List[float] = []
+        self.metrics_total_revenue: List[float] = []
+        self.metrics_total_operation_cost: List[float] = []
+        self.metrics_total_profit: List[float] = []
         self._metrics_departed_agents_count: int = 0
         self._metrics_departed_total_rides_completed: float = 0.0
         self._metrics_departed_total_queue_time: float = 0.0
@@ -278,6 +281,18 @@ class ThemeParkSim:
         self.metrics_avg_num_rides_visited.append(avg_rides)
         self.metrics_avg_queue_time.append(avg_queue_time)
 
+        total_revenue = 0.0
+        total_operation_cost = 0.0
+        for meta in self.node_data.values():
+            if not isinstance(meta, Ride):
+                continue
+            total_revenue += meta.total_revenue
+            total_operation_cost += meta.total_operation_cost
+
+        self.metrics_total_revenue.append(total_revenue)
+        self.metrics_total_operation_cost.append(total_operation_cost)
+        self.metrics_total_profit.append(total_revenue - total_operation_cost)
+
     def _add_node(
         self,
         node_id: str,
@@ -292,11 +307,25 @@ class ThemeParkSim:
         image_path: Optional[str] = None,
         ride_duration_steps: int = 60,
         min_occupancy_ratio: float = 0.80,
+        operation_cost_base_per_cycle: Optional[float] = None,
+        operation_cost_per_capacity_unit: Optional[float] = None,
+        fastpass_price_per_ride: Optional[float] = None,
+        standard_price_per_ride: Optional[float] = None,
     ) -> None:
         self.graph.add_node(node_id)
         self.positions[node_id] = (x, y)
 
         if kind == "ride":
+            ride_financial_kwargs: dict[str, float] = {}
+            if operation_cost_base_per_cycle is not None:
+                ride_financial_kwargs["operation_cost_base_per_cycle"] = operation_cost_base_per_cycle
+            if operation_cost_per_capacity_unit is not None:
+                ride_financial_kwargs["operation_cost_per_capacity_unit"] = operation_cost_per_capacity_unit
+            if fastpass_price_per_ride is not None:
+                ride_financial_kwargs["fastpass_price_per_ride"] = fastpass_price_per_ride
+            if standard_price_per_ride is not None:
+                ride_financial_kwargs["standard_price_per_ride"] = standard_price_per_ride
+
             node = Ride(
                 name=name,
                 max_capacity=max_capacity,
@@ -304,8 +333,9 @@ class ThemeParkSim:
                 color=color,
                 radius=radius,
                 image_path=image_path,
-                ride_duration_steps =ride_duration_steps,
+                ride_duration_steps=ride_duration_steps,
                 min_occupancy_ratio=min_occupancy_ratio,
+                **ride_financial_kwargs,
             )
         else:
             node = NodeData(
@@ -621,8 +651,8 @@ class ThemeParkSim:
 
     def output_metrics(self) -> None:
 
-        # Stack 3 plots on top of each other
-        fig, axs = plt.subplots(3, 1, figsize=(12, 8))
+        # Stack key simulation and financial trends.
+        fig, axs = plt.subplots(4, 1, figsize=(12, 11))
         axs[0].plot(self.metrics_timesteps, self.metrics_avg_visitor_density, label="Average Visitor Density")
         axs[0].set_xlabel("Time Step")
         axs[0].set_ylabel("Visitor Density (people per unit length)")
@@ -641,9 +671,43 @@ class ThemeParkSim:
         axs[2].set_title("Average Queue Time Over Time in Simulation")
         axs[2].legend()
         axs[2].grid(True)
+        axs[3].plot(self.metrics_timesteps, self.metrics_total_revenue, label="Cumulative Ride Revenue", color='tab:blue')
+        axs[3].plot(self.metrics_timesteps, self.metrics_total_operation_cost, label="Cumulative Ride Operating Cost", color='tab:red')
+        axs[3].plot(self.metrics_timesteps, self.metrics_total_profit, label="Cumulative Ride Profit", color='tab:green')
+        axs[3].set_xlabel("Time Step")
+        axs[3].set_ylabel("Amount")
+        axs[3].set_title("Ride Financial Metrics Over Time")
+        axs[3].legend()
+        axs[3].grid(True)
         plt.tight_layout()
         plt.show()
         plt.close()
+
+        total_revenue = 0.0
+        total_operation_cost = 0.0
+        total_cycles = 0
+        print("Ride Financial Summary")
+        print("-" * 80)
+        print(
+            f"{'Ride':18s} {'Cycles':>8s} {'Revenue':>12s} {'Op Cost':>12s} {'Profit':>12s} {'Fastpass':>10s} {'Standard':>10s}"
+        )
+        for node_id, meta in self.node_data.items():
+            if not isinstance(meta, Ride):
+                continue
+
+            total_revenue += meta.total_revenue
+            total_operation_cost += meta.total_operation_cost
+            total_cycles += meta.total_cycles_started
+            print(
+                f"{node_id:18s} {meta.total_cycles_started:8d} {meta.total_revenue:12.2f} "
+                f"{meta.total_operation_cost:12.2f} {meta.total_profit:12.2f} "
+                f"{meta.total_fastpass_customers:10d} {meta.total_standard_customers:10d}"
+            )
+
+        print("-" * 80)
+        print(
+            f"{'TOTAL':18s} {total_cycles:8d} {total_revenue:12.2f} {total_operation_cost:12.2f} {(total_revenue - total_operation_cost):12.2f}"
+        )
 
     # ==================
     # Parameter tuning
