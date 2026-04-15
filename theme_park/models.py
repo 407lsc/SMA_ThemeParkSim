@@ -515,7 +515,10 @@ class Agent:
 
     def execute_step(self, dt: float, runtime: AgentRuntime) -> None:
         """Execute one simulation tick using behavior specific to current state."""
-        self.time_in_park += runtime.minutes_per_step
+        # dt is simulated seconds advanced in this tick.
+        # Convert to simulated minutes for any per-agent time accounting.
+        elapsed_minutes = max(dt, 0.0) / 60.0
+        self.time_in_park += elapsed_minutes
 
         if (
             not self.is_exiting
@@ -527,7 +530,7 @@ class Agent:
             self._execute_stationary(runtime)
             return
         if self.state == "queuing":
-            self._execute_queuing(runtime)
+            self._execute_queuing(elapsed_minutes, runtime)
             return
         if self.state == "on_ride":
             self._execute_on_ride(runtime)
@@ -611,12 +614,12 @@ class Agent:
 
         runtime.refresh_agent_position(self)
 
-    def _execute_queuing(self, runtime: AgentRuntime) -> None:
+    def _execute_queuing(self, elapsed_minutes: float, runtime: AgentRuntime) -> None:
         """Queued agents wait until boarded, unless they are exiting."""
         self._leave_current_edge(runtime)
 
         # Count waiting time while the agent is in queue state.
-        self.queue_time_minutes += runtime.minutes_per_step
+        self.queue_time_minutes += elapsed_minutes
 
         # Closing override: leave queue immediately
         if self.is_exiting:
