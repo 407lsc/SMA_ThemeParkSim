@@ -18,7 +18,7 @@ HOVER_BORDER = (30, 30, 30)
 TEXT_COLOR = (25, 25, 25)
 PANEL_BG = (235, 238, 242)
 DEFAULT_AGENT_COLOR = (40, 40, 40)
-DISABLE_GRAPHICS = True  # Set True to disable all graphic updates (for headless/batch runs)
+DISABLE_GRAPHICS = False  # Set True to disable all graphic updates (for headless/batch runs)
 
 # Technical simulation settings
 RANDOM_SEED = 42

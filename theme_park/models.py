@@ -102,7 +102,7 @@ class Ride(NodeData):
         ride_duration_steps: int = 60,
         min_occupancy_ratio: float = 0.80,
         operation_cost_base_per_cycle: float = 100.0,
-        operation_cost_per_capacity_unit: float = 2.0,
+        operation_cost_per_capacity_unit: float = 3.0,
         fastpass_price_per_ride: float = 10.0,
         standard_price_per_ride: float = 7.0,
     ) -> None:
