@@ -48,7 +48,7 @@ GLOBAL_SINGLE_RIDER_WEIGHT = 0.20
 # Visitor generation defaults
 # 1) GROUP_SPAWN_PROB determines whether a spawn is group vs individual.
 # 2) If individual, INDIVIDUAL_VISITOR_TYPE_WEIGHTS chooses teen/adult/elderly.
-GROUP_SPAWN_PROB = 0.15
+GROUP_SPAWN_PROB = 0.05
 INDIVIDUAL_VISITOR_TYPE_WEIGHTS = {
 	"teenager": 0.25,
 	"adult": 0.40,

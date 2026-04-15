@@ -318,9 +318,9 @@ class ThemeParkSim:
         self._add_node("n3", 484, 724, "intersection", "")
         self._add_node("n4", 744, 539, "intersection", "")
         self._add_node("n5", 598, 445, "intersection", "")
-        self._add_node("ride1", 874, 381, "ride", "Log Flume", max_capacity=30, capacity=24, image_path="inputs/Log_flume.png",ride_duration_steps=17,min_occupancy_ratio=0.80)
-        self._add_node("ride2", 496, 373, "ride", "Ferris Wheel", max_capacity=100, capacity=32, image_path = "inputs/Ferris_wheel.png", ride_duration_steps=20,min_occupancy_ratio=0.80)
-        self._add_node("ride3", 562, 662, "ride", "Roller Coaster", max_capacity=30, capacity=20, image_path = "inputs/roller_coaster.png", ride_duration_steps=15, min_occupancy_ratio=0.80)
+        self._add_node("ride1", 874, 381, "ride", "Log Flume", max_capacity=30, capacity=24, image_path="inputs/Log_flume.png",ride_duration_steps=3,min_occupancy_ratio=0.80)
+        self._add_node("ride2", 496, 373, "ride", "Ferris Wheel", max_capacity=100, capacity=32, image_path = "inputs/Ferris_wheel.png", ride_duration_steps=5,min_occupancy_ratio=0.80)
+        self._add_node("ride3", 562, 662, "ride", "Roller Coaster", max_capacity=30, capacity=20, image_path = "inputs/roller_coaster.png", ride_duration_steps=3, min_occupancy_ratio=0.80)
         self._add_node("n6", 854, 271, "intersection", "")
         self._add_node("n7", 932, 324, "intersection", "")
 
@@ -548,8 +548,9 @@ class ThemeParkSim:
         # random.expovariate expects rate = 1 / mean
         sampled = random.expovariate(1.0 / mean_minutes)
 
-        # Optional clamp so nobody leaves instantly or stays absurdly long
-        return max(20.0, min(sampled, 360.0))
+        # Optional clamp so nobody leaves instantly or stays past park closing
+        max_stay_time = self.park_close_time - self.current_time_minutes
+        return max(20.0, min(sampled, max_stay_time))
     
     def path_to_entrance(self, start: str) -> list[str]:
         target = "entrance"
