@@ -13,6 +13,7 @@ from .config import (
     SIM_TIME_STEPS,
     PARK_OPEN_TIME,
     PARK_CLOSE_TIME,
+    RANDOM_SEED,
     AGENT_SPAWN_PROB,
     GROUP_SPAWN_PROB,
     INDIVIDUAL_VISITOR_TYPE_WEIGHTS,
@@ -29,6 +30,9 @@ from .models import Agent, AdultAgent, ElderlyAgent, TeenagerAgent, GroupAgent, 
 
 class ThemeParkSim:
     def __init__(self) -> None:
+        # Make all simulation randomness reproducible and controlled by config.
+        random.seed(RANDOM_SEED)
+
         self.graph = nx.Graph()
         self.positions: Dict[str, Vec2] = {}
         self.node_data: Dict[str, NodeData] = {}
@@ -39,6 +43,7 @@ class ThemeParkSim:
 
         self.agent_count = 0
         self.paused: bool = False
+        self.enable_final_output_metrics: bool = True
 
         if SIM_TIME_STEPS <= 0:
             raise ValueError("SIM_TIME_STEPS must be greater than 0")
@@ -505,7 +510,8 @@ class ThemeParkSim:
         # Auto-stop once closing has started and everyone has exited.
         if self.park_is_closing and self.agent_count == 0:
             self.paused = True
-            self.output_metrics()
+            if self.enable_final_output_metrics:
+                self.output_metrics()
 
         self._metrics_minutes_since_last_collect += elapsed_minutes
         while self._metrics_minutes_since_last_collect >= self.metrics_collect_interval_s:
