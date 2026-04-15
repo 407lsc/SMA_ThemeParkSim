@@ -434,9 +434,9 @@ class ControlPanel:
         y += 26
 
         queue_rows = [
-            ("Fast Pass (>= 0)", "fastpass", sim.single_fastpass_weight),
+            ("Fast Pass (0 to 0.5)", "fastpass", sim.single_fastpass_weight),
             ("Normal (> 0)", "normal", sim.single_normal_weight),
-            ("Single Rider (>= 0)", "single_rider", sim.single_rider_weight),
+            ("Single Rider (0 to 0.5)", "single_rider", sim.single_rider_weight),
         ]
         for label, key, value in queue_rows:
             row_label = pygame_gui.elements.UILabel(

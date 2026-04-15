@@ -18,6 +18,7 @@ HOVER_BORDER = (30, 30, 30)
 TEXT_COLOR = (25, 25, 25)
 PANEL_BG = (235, 238, 242)
 DEFAULT_AGENT_COLOR = (40, 40, 40)
+DISABLE_GRAPHICS = True  # Set True to disable all graphic updates (for headless/batch runs)
 
 # Technical simulation settings
 RANDOM_SEED = 42
@@ -39,10 +40,11 @@ AGENT_SPAWN_PROB = 0.10 # Probability of at least one spawn over 1 simulated sec
 PARK_OPEN_TIME = 9 * 60  # 9:00 AM in minutes
 PARK_CLOSE_TIME = 21 * 60  # 9:00 PM in minutes
 DEFAULT_AGENT_SPEED_M = 1.58  # Meters per second
+DEFAULT_SIMULATION_SPEED = 5000.0  # Initial simulation speed multiplier (1.0x = real-time)
 
 # Global pass ratio targets (add up to 1.0, minimum 0.0)
-GLOBAL_FASTPASS_WEIGHT = 0.20
-GLOBAL_NORMAL_WEIGHT = 0.60 # Cannot be 0 for this
+GLOBAL_FASTPASS_WEIGHT = 0.05
+GLOBAL_NORMAL_WEIGHT = 0.75 # Cannot be 0 for this
 GLOBAL_SINGLE_RIDER_WEIGHT = 0.20
 
 # Visitor generation defaults
@@ -66,9 +68,7 @@ METRICS_COLLECT_INTERVAL = 1 # Collect metrics every N simulated minutes
 # Parameter tuning
 # ================
 CAPACITY_TUNING_STEP = 5
-PASS_TYPE_TUNING_STEP = 0.05
-
-
+PASS_TYPE_TUNING_STEP = 0.1
 
 # ==================
 # DO NOT TOUCH BELOW
