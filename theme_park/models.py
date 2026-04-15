@@ -288,6 +288,46 @@ class Ride(NodeData):
                 self._boarded_agent_ids.discard(agent_id)
             self._restore_to_original_queue(boarded_groups)
 
+    def _board_balanced_queue_pair(
+        self,
+        first_queue: Queue[tuple[AgentId, int, str]],
+        second_queue: Queue[tuple[AgentId, int, str]],
+        release_capacity: int,
+    ) -> list[tuple[AgentId, int, str]]:
+        boarded_groups: list[tuple[AgentId, int, str]] = []
+        remaining_capacity = release_capacity
+        queues = [first_queue, second_queue]
+        next_queue_index = 0
+        consecutive_misses = 0
+
+        while remaining_capacity > 0 and consecutive_misses < len(queues):
+            source_queue = queues[next_queue_index]
+            next_queue_index = (next_queue_index + 1) % len(queues)
+
+            next_group = self._peek_next(source_queue)
+            if next_group is None:
+                consecutive_misses += 1
+                continue
+
+            _agent_id, group_size, _queue_type = next_group
+            if group_size > remaining_capacity:
+                consecutive_misses += 1
+                continue
+
+            boarded = self._pop_next(source_queue)
+            if boarded is None:
+                consecutive_misses += 1
+                continue
+
+            boarded_agent_id, boarded_group_size, boarded_queue_type = boarded
+            self._queued_agent_ids.discard(boarded_agent_id)
+            self._boarded_agent_ids.add(boarded_agent_id)
+            boarded_groups.append((boarded_agent_id, boarded_group_size, boarded_queue_type))
+            remaining_capacity -= boarded_group_size
+            consecutive_misses = 0
+
+        return boarded_groups
+
     def is_boarded_from_queue(self, agent_id: AgentId) -> bool:
         return agent_id in self._boarded_agent_ids
 

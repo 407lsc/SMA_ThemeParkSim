@@ -41,8 +41,8 @@ PARK_CLOSE_TIME = 21 * 60  # 9:00 PM in minutes
 DEFAULT_AGENT_SPEED_M = 1.58  # Meters per second
 
 # Global pass ratio targets (add up to 1.0, minimum 0.0)
-GLOBAL_FASTPASS_WEIGHT = 0.20
-GLOBAL_NORMAL_WEIGHT = 0.60 # Cannot be 0 for this
+GLOBAL_FASTPASS_WEIGHT = 0.05
+GLOBAL_NORMAL_WEIGHT = 0.75 # Cannot be 0 for this
 GLOBAL_SINGLE_RIDER_WEIGHT = 0.20
 
 # Visitor generation defaults
