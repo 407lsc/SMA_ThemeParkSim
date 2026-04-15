@@ -3,6 +3,7 @@ from __future__ import annotations
 # ==================
 # Technical settings
 # ==================
+
 # Window configuration and graphics
 WIDTH, HEIGHT = 1280, 800
 PANEL_W = 320
@@ -23,16 +24,21 @@ RANDOM_SEED = 42
 
 # Simulation clock mapping:
 # SIM_TIME_STEPS steps correspond to SIM_TIME_MINUTES simulated minutes.
-SIM_TIME_STEPS = 10
+SIM_TIME_STEPS = 60
 SIM_TIME_MINUTES = 1.0
+
+# Simulation distance settings:
+# SIM_DISTANCE_PIXELS units correspond to SIM_DISTANCE_METERS real-world meters.
+SIM_DISTANCE_PIXELS = 6.7
+SIM_DISTANCE_METERS = 1.0
 
 # ===================
 # Simulation settings
 # ===================
-AGENT_SPAWN_PROB = 0.95 # Probability of spawning a new agent each time step (when park is open)
+AGENT_SPAWN_PROB = 0.10 # Probability of at least one spawn over 1 simulated second (when park is open)
 PARK_OPEN_TIME = 9 * 60  # 9:00 AM in minutes
 PARK_CLOSE_TIME = 21 * 60  # 9:00 PM in minutes
-DEFAULT_AGENT_SPEED = 80.0
+DEFAULT_AGENT_SPEED_M = 1.58  # Meters per second
 
 # Global pass ratio targets (add up to 1.0, minimum 0.0)
 GLOBAL_FASTPASS_WEIGHT = 0.20
@@ -61,3 +67,10 @@ METRICS_COLLECT_INTERVAL = 1 # Collect metrics every N simulated minutes
 # ================
 CAPACITY_TUNING_STEP = 5
 PASS_TYPE_TUNING_STEP = 0.05
+
+
+
+# ==================
+# DO NOT TOUCH BELOW
+# ==================
+DEFAULT_AGENT_SPEED_PX = DEFAULT_AGENT_SPEED_M * SIM_DISTANCE_PIXELS / SIM_DISTANCE_METERS

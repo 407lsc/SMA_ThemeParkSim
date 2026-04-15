@@ -379,7 +379,7 @@ class ControlPanel:
         self.ride_capacity_entries: dict[str, pygame_gui.elements.UITextEntryLine] = {}
 
         # Set up value ranges for sliders
-        self.sim_speed_range = (0.1, 50.0)
+        self.sim_speed_range = (0.1, 1000.0)
 
         panel_x = SIM_W + 15
         y = 20

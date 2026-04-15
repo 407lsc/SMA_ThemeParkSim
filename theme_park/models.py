@@ -4,7 +4,7 @@ import random
 from queue import Empty, Queue
 from pathlib import Path 
 from typing import Dict, List, Literal, Optional, Protocol, Tuple
-from .config import DEFAULT_AGENT_SPEED
+from .config import DEFAULT_AGENT_SPEED_PX
 import pygame
 
 Vec2 = Tuple[float, float]
@@ -676,7 +676,7 @@ class TeenagerAgent(Agent):
     ) -> None:
         super().__init__(
             agent_id=agent_id,
-            speed=DEFAULT_AGENT_SPEED * 1.10,
+            speed=DEFAULT_AGENT_SPEED_PX * 1.10,
             color=color,
             path=path,
             visitor_type="teenager",
@@ -709,7 +709,7 @@ class AdultAgent(Agent):
     ) -> None:
         super().__init__(
             agent_id=agent_id,
-            speed=DEFAULT_AGENT_SPEED,
+            speed=DEFAULT_AGENT_SPEED_PX,
             color=color,
             path=path,
             visitor_type="adult",
@@ -742,7 +742,7 @@ class ElderlyAgent(Agent):
     ) -> None:
         super().__init__(
             agent_id=agent_id,
-            speed=DEFAULT_AGENT_SPEED * 0.80,
+            speed=DEFAULT_AGENT_SPEED_PX * 0.80,
             color=color,
             path=path,
             visitor_type="elderly",
@@ -777,7 +777,7 @@ class GroupAgent(Agent):
             group_size = 2  # enforce minimum group size
         super().__init__(
             agent_id=agent_id,
-            speed=DEFAULT_AGENT_SPEED * 0.95,  # slightly slower
+            speed=DEFAULT_AGENT_SPEED_PX * 0.95,  # slightly slower
             color=color,
             path=path,
             visitor_type="group",

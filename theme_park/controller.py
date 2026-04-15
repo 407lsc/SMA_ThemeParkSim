@@ -1,11 +1,12 @@
 from __future__ import annotations
 
+import math
 from typing import Optional, Tuple
 
 import pygame
 import pygame_gui
 
-from .config import FPS, HEIGHT, SIM_W, WIDTH
+from .config import DEFAULT_AGENT_SPEED_PX, FPS, HEIGHT, SIM_W, WIDTH
 from .models import Ride
 from .simulation import ThemeParkSim
 from .view import ControlPanel, ParkView
@@ -27,6 +28,8 @@ class App:
         self._step_accumulator = 0.0
         self._max_steps_hard_cap = 400
         self._max_frame_dt_for_steps = 0.1
+        self._max_micro_steps_per_step = 50
+        self._max_edge_fraction_per_micro_step = 0.20
         self.tooltip_node: Optional[str] = None
         self.mouse_pos: Tuple[int, int] = (0, 0)
 
@@ -165,6 +168,28 @@ class App:
             self._apply_text_entry_value(entry, entry.get_text())
             self._dirty_text_entries.discard(entry)
 
+    def _compute_micro_steps(self, simulated_seconds_per_step: float) -> int:
+        if simulated_seconds_per_step <= 0:
+            return 1
+
+        edge_lengths = [edge.length for edge in self.sim.edge_data.values() if edge.length > 0]
+        if not edge_lengths:
+            return 1
+
+        min_edge_length = min(edge_lengths)
+
+        max_active_speed = max((agent.speed for agent in self.sim.agents), default=0.0)
+        max_possible_speed = max(DEFAULT_AGENT_SPEED_PX * 1.10, max_active_speed)
+        if max_possible_speed <= 0:
+            return 1
+
+        max_dt = (self._max_edge_fraction_per_micro_step * min_edge_length) / max_possible_speed
+        if max_dt <= 0:
+            return 1
+
+        micro_steps = max(1, math.ceil(simulated_seconds_per_step / max_dt))
+        return min(micro_steps, self._max_micro_steps_per_step)
+
     """Logic for handling button press events"""
     def _handle_button_event(self, event) -> None:
         if event.ui_element == self.control_panel.reset_button:
@@ -207,22 +232,30 @@ class App:
     def update(self, dt: float) -> None:
         self.ui_manager.update(dt)
 
-        # Run discrete simulation steps from a speed-scaled fixed-step budget.
-        # This keeps step progression sequential and avoids skipping steps.
+        # Run discrete simulation steps from a speed-scaled budget.
+        # 1.0x means 1 simulated second progresses per 1 real second.
         if not self.sim.paused:
             # Clamp frame dt to avoid giant catch-up jumps after hiccups/focus loss.
             effective_dt = min(dt, self._max_frame_dt_for_steps)
-            self._step_accumulator += effective_dt * self.simulation_speed * FPS
+
+            simulated_seconds_per_step = self.sim.minutes_per_step * 60.0
+            if simulated_seconds_per_step > 0:
+                self._step_accumulator += (
+                    effective_dt * self.simulation_speed / simulated_seconds_per_step
+                )
+
             steps_available = int(self._step_accumulator)
-            # At speed=x, roughly x steps become due per rendered frame.
             # Use an adaptive cap so high speeds are not throttled by a low fixed cap.
             adaptive_cap = min(self._max_steps_hard_cap, max(8, int(self.simulation_speed) + 8))
             steps_to_run = min(steps_available, adaptive_cap)
             if steps_to_run > 0:
                 self._step_accumulator -= steps_to_run
-                fixed_dt = 1.0 / FPS
+                fixed_dt = simulated_seconds_per_step
                 for _ in range(steps_to_run):
-                    self.sim.step(fixed_dt)
+                    micro_steps = self._compute_micro_steps(fixed_dt)
+                    micro_dt = fixed_dt / micro_steps
+                    for _ in range(micro_steps):
+                        self.sim.step(micro_dt)
 
         self.mouse_pos = pygame.mouse.get_pos()
         if self.mouse_pos[0] < SIM_W:

@@ -32,6 +32,7 @@ class ThemeParkSim:
         self.edge_data: Dict[EdgeKey, EdgeData] = {}
         self.agents: List[Agent] = []
         self.current_time_step: int = 0
+        self._elapsed_sim_minutes: float = 0.0
 
         self.agent_count = 0
         self.paused: bool = False
@@ -53,6 +54,7 @@ class ThemeParkSim:
         self.total_exited = 0
 
         self.group_spawn_prob = min(max(GROUP_SPAWN_PROB, 0.0), 1.0)
+        self.agent_spawn_prob_per_sim_second = min(max(AGENT_SPAWN_PROB, 0.0), 1.0)
         self.individual_type_weights = INDIVIDUAL_VISITOR_TYPE_WEIGHTS
         if GROUP_SIZE_MIN < 2 or GROUP_SIZE_MAX < GROUP_SIZE_MIN:
             raise ValueError("GROUP_SIZE_MIN/GROUP_SIZE_MAX configuration is invalid")
@@ -71,7 +73,7 @@ class ThemeParkSim:
 
         # Metrics collection
         self.metrics_collect_interval_s = METRICS_COLLECT_INTERVAL
-        self.metrics_collect_interval_steps = max(1, int(self.metrics_collect_interval_s / self.minutes_per_step))
+        self._metrics_minutes_since_last_collect: float = 0.0
         self.metrics_timesteps: List[int] = []
         self.metrics_avg_visitor_density: List[float] = []
         self.metrics_avg_num_rides_visited: List[float] = []
@@ -89,7 +91,7 @@ class ThemeParkSim:
     @property
     def elapsed_sim_time(self) -> float:
         """Elapsed simulated park time in minutes since opening."""
-        return self.current_time_step * self.minutes_per_step
+        return self._elapsed_sim_minutes
 
     @property
     def current_time_minutes(self) -> float:
@@ -100,7 +102,7 @@ class ThemeParkSim:
         self._build_park()
 
     def execute_step(self, dt: float) -> None:
-        _ = dt
+        dt_sim_seconds = max(dt, 0.0)
 
         for meta in self.node_data.values():
             if isinstance(meta, Ride):
@@ -108,9 +110,9 @@ class ThemeParkSim:
 
         # Do not admit new agents after closing starts
         if not self.park_is_closing:
-
-            # Spawn new agent
-            if random.random() > AGENT_SPAWN_PROB:
+            # Convert per-sim-second spawn chance to this step's duration.
+            spawn_prob_this_step = 1.0 - (1.0 - self.agent_spawn_prob_per_sim_second) ** dt_sim_seconds
+            if random.random() < spawn_prob_this_step:
                 self.add_agent()
 
     def _random_visitor_type(self) -> str:
@@ -442,7 +444,10 @@ class ThemeParkSim:
         if self.paused:
             return
 
-        self.current_time_step += 1
+        # dt is simulated seconds advanced in this tick.
+        elapsed_minutes = dt / 60.0
+        self._elapsed_sim_minutes += elapsed_minutes
+        self.current_time_step = int(self._elapsed_sim_minutes / self.minutes_per_step)
 
         if self.current_time_minutes >= self.park_close_time:
             self._begin_park_closing()
@@ -466,8 +471,10 @@ class ThemeParkSim:
             self.paused = True
             self.output_metrics()
 
-        if self.current_time_step % self.metrics_collect_interval_steps == 0:
+        self._metrics_minutes_since_last_collect += elapsed_minutes
+        while self._metrics_minutes_since_last_collect >= self.metrics_collect_interval_s:
             self._collect_metrics_snapshot()
+            self._metrics_minutes_since_last_collect -= self.metrics_collect_interval_s
 
     def node_at_position(self, mouse_pos: Tuple[int, int], radius: int = 80) -> Optional[str]:
         mx, my = mouse_pos
@@ -519,10 +526,12 @@ class ThemeParkSim:
         return "\n".join(lines)
     
     def get_time_str(self) -> str:
-        total_minutes = int(self.current_time_minutes)
-        hours = total_minutes // 60
-        minutes = total_minutes % 60
-        return f"{hours:02d}:{minutes:02d}"
+        # Round to nearest second to avoid floating-point floor jitter.
+        total_seconds = int(round(self.current_time_minutes * 60))
+        hours = (total_seconds // 3600) % 24
+        minutes = (total_seconds % 3600) // 60
+        seconds = total_seconds % 60
+        return f"{hours:02d}:{minutes:02d}:{seconds:02d}"
     
     def _sample_departure_time(self, visitor_type: str) -> float:
         """Return minutes until departure using an exponential distribution."""
@@ -604,6 +613,29 @@ class ThemeParkSim:
                 self.graph[u][v]["length"] = edge.length
 
     def output_metrics(self) -> None:
-        pass
+
+        # Stack 3 plots on top of each other
+        fig, axs = plt.subplots(3, 1, figsize=(12, 8))
+        axs[0].plot(self.metrics_timesteps, self.metrics_avg_visitor_density, label="Average Visitor Density")
+        axs[0].set_xlabel("Time Step")
+        axs[0].set_ylabel("Visitor Density (people per unit length)")
+        axs[0].set_title("Average Visitor Density Over Time in Simulation")
+        axs[0].legend()
+        axs[0].grid(True)
+        axs[1].plot(self.metrics_timesteps, self.metrics_avg_num_rides_visited, label="Average Number of Rides Visited", color='orange')
+        axs[1].set_xlabel("Time Step")
+        axs[1].set_ylabel("No. of Rides")
+        axs[1].set_title("Average Number of Rides Visited Over Time in Simulation")
+        axs[1].legend()
+        axs[1].grid(True)
+        axs[2].plot(self.metrics_timesteps, self.metrics_avg_queue_time, label="Average Queue Time (minutes)", color='green')
+        axs[2].set_xlabel("Time Step")
+        axs[2].set_ylabel("Time (minutes)")
+        axs[2].set_title("Average Queue Time Over Time in Simulation")
+        axs[2].legend()
+        axs[2].grid(True)
+        plt.tight_layout()
+        plt.show()
+        plt.close()
     
     
