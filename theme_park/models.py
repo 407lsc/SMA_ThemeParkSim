@@ -75,7 +75,9 @@ class NodeData:
                 if not full_path.exists():
                     print(f"[ERROR] Image file not found: {full_path}")
                 else:
-                    img = pygame.image.load(str(full_path)).convert_alpha()
+                    img = pygame.image.load(str(full_path))
+                    if pygame.display.get_surface() is not None:
+                        img = img.convert_alpha()
 
                     #  Bigger sizing logic
                     if kind == "ride":
@@ -261,19 +263,18 @@ class Ride(NodeData):
         remaining_capacity = self.capacity
         boarded_groups: List[tuple[AgentId, int, str]] = []
 
-        # Fastpass, then normal, then single rider as filler
+        # Fastpass boards first, then normal and single riders share the rest evenly.
         new_boarded = self.remove_from_queue(self.fastpass_queue, remaining_capacity)
         if new_boarded:
             boarded_groups.extend(new_boarded)
             remaining_capacity -= sum(group_size for _, group_size, _ in new_boarded)
 
-        new_boarded = self.remove_from_queue(self.normal_queue, remaining_capacity)
-        if new_boarded:
-            boarded_groups.extend(new_boarded)
-            remaining_capacity -= sum(group_size for _, group_size, _ in new_boarded)
-
         if remaining_capacity > 0:
-            new_boarded = self.remove_from_queue(self.single_rider_queue, remaining_capacity)
+            new_boarded = self._board_balanced_queue_pair(
+                self.normal_queue,
+                self.single_rider_queue,
+                remaining_capacity,
+            )
             if new_boarded:
                 boarded_groups.extend(new_boarded)
                 remaining_capacity -= sum(group_size for _, group_size, _ in new_boarded)

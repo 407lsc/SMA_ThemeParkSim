@@ -40,6 +40,12 @@ class App:
         self._max_frame_dt_for_steps = 0.1
         self._max_micro_steps_per_step = 50
         self._max_edge_fraction_per_micro_step = 0.20
+
+        if DISABLE_GRAPHICS:
+            # Headless runs can trade responsiveness for throughput.
+            self._max_steps_hard_cap = 5000
+            self._max_frame_dt_for_steps = 1.0
+            self._max_micro_steps_per_step = 1
         self.tooltip_node: Optional[str] = None
         self.mouse_pos: Tuple[int, int] = (0, 0)
 
@@ -288,7 +294,8 @@ class App:
                     self._dirty_text_entries.add(event.ui_element)
 
     def update(self, dt: float) -> None:
-        self.ui_manager.update(dt)
+        if not DISABLE_GRAPHICS:
+            self.ui_manager.update(dt)
 
         # Run discrete simulation steps from a speed-scaled budget.
         # 1.0x means 1 simulated second progresses per 1 real second.
@@ -315,19 +322,23 @@ class App:
                     for _ in range(micro_steps):
                         self.sim.step(micro_dt)
 
-        self.mouse_pos = pygame.mouse.get_pos()
-        if self.mouse_pos[0] < SIM_W:
-            self.tooltip_node = self.sim.node_at_position(self.mouse_pos)
-        else:
+        if DISABLE_GRAPHICS:
             self.tooltip_node = None
+        else:
+            self.mouse_pos = pygame.mouse.get_pos()
+            if self.mouse_pos[0] < SIM_W:
+                self.tooltip_node = self.sim.node_at_position(self.mouse_pos)
+            else:
+                self.tooltip_node = None
 
-        self._commit_blurred_text_entries()
-        self.control_panel.pause_button.set_text(
-            "Resume" if self.sim.paused else "Pause"
-        )
-        self.control_panel.clock_label.set_text(
-            f"Time: {self.sim.get_time_str()}"
-        )
+        if not DISABLE_GRAPHICS:
+            self._commit_blurred_text_entries()
+            self.control_panel.pause_button.set_text(
+                "Resume" if self.sim.paused else "Pause"
+            )
+            self.control_panel.clock_label.set_text(
+                f"Time: {self.sim.get_time_str()}"
+            )
 
     def draw(self) -> None:
         if DISABLE_GRAPHICS:
@@ -338,7 +349,7 @@ class App:
 
     def run(self) -> None:
         while self.running:
-            dt = self.clock.tick(FPS) / 1000.0
+            dt = self.clock.tick(0 if DISABLE_GRAPHICS else FPS) / 1000.0
             self.handle_events()
             self.update(dt)
             self.draw()
