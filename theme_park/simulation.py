@@ -679,8 +679,15 @@ class ThemeParkSim:
         return options
 
     @staticmethod
-    def pass_weight_tuning_options(step: Optional[float] = None) -> list[tuple[float, float, float]]:
-        """Return all (fastpass, normal, single_rider) triples on a fixed step grid.
+    def pass_weight_tuning_options(
+        step: Optional[float] = None,
+        fixed_single_rider: Optional[float] = None,
+    ) -> list[tuple[float, float, float]]:
+        """Return pass-weight combinations for tuning.
+
+        `single_rider` is kept fixed (defaults to GLOBAL_SINGLE_RIDER_WEIGHT).
+        `fastpass` is swept in increments of `step`, and `normal` is computed as
+        `1 - fastpass - single_rider`.
 
         Constraints:
         - 0 <= fastpass <= 0.5
@@ -689,38 +696,39 @@ class ThemeParkSim:
         - fastpass + normal + single_rider == 1
 
         Notes:
-        - Uses integer units to avoid float drift.
-        - Requires that 1.0 is an integer multiple of step.
+        - This does not require `single_rider` to be a multiple of `step`.
         """
         step_value = PASS_TYPE_TUNING_STEP if step is None else float(step)
         if step_value <= 0:
             raise ValueError("PASS_TYPE_TUNING_STEP must be > 0")
 
-        denom = round(1.0 / step_value)
-        if denom <= 0 or abs(denom * step_value - 1.0) > 1e-9:
-            raise ValueError(
-                "PASS_TYPE_TUNING_STEP must evenly divide 1.0 (e.g. 0.05, 0.1, 0.25)"
-            )
+        single_rider = GLOBAL_SINGLE_RIDER_WEIGHT if fixed_single_rider is None else float(fixed_single_rider)
+        if single_rider < 0.0 or single_rider > 0.5:
+            raise ValueError("Fixed single rider weight must be within [0.0, 0.5]")
 
+        # fastpass must leave strictly-positive normal.
+        max_fastpass = min(0.5, 1.0 - single_rider - 1e-12)
+        if max_fastpass < 0.0:
+            return []
+
+        n_steps = int(math.floor((max_fastpass + 1e-12) / step_value))
         combos: list[tuple[float, float, float]] = []
-        for fast_units in range(0, denom + 1):
-            max_single_units = denom - fast_units
-            # normal_units must be >= 1 (strictly > 0)
-            for single_units in range(0, max_single_units + 1):
-                normal_units = denom - fast_units - single_units
-                if normal_units <= 0:
-                    continue
+        for i in range(n_steps + 1):
+            fastpass = i * step_value
+            if fastpass > 0.5 + 1e-9:
+                continue
+            normal = 1.0 - single_rider - fastpass
+            if normal <= 0.0:
+                continue
 
-                fastpass = fast_units * step_value
-                if fastpass > 0.5 + 1e-9:
-                    continue
+            # Round for stable printing/serialization and to avoid tiny drift.
+            fastpass_r = round(fastpass, 10)
+            normal_r = round(normal, 10)
+            single_rider_r = round(single_rider, 10)
 
-                normal = normal_units * step_value
-                single_rider = single_units * step_value
-                if single_rider > 0.5 + 1e-9:
-                    continue
-
-                combos.append((fastpass, normal, single_rider))
+            if abs((fastpass_r + normal_r + single_rider_r) - 1.0) > 1e-8:
+                continue
+            combos.append((fastpass_r, normal_r, single_rider_r))
 
         return combos
 

@@ -1,7 +1,11 @@
 from __future__ import annotations
 
+import csv
 import math
+import re
+from pathlib import Path
 from typing import Optional, Tuple
+from datetime import datetime
 
 import pygame
 import pygame_gui
@@ -13,6 +17,7 @@ from .config import (
     DISABLE_GRAPHICS,
     FPS,
     HEIGHT,
+    OUTPUT_DIR,
     PASS_TYPE_TUNING_STEP,
     SIM_W,
     WIDTH,
@@ -69,6 +74,73 @@ class App:
         self._step_accumulator = 0.0
         self.control_panel.sync_from_sim(self.sim, self.simulation_speed)
 
+    @staticmethod
+    def _slugify_column(value: str) -> str:
+        slug = re.sub(r"[^a-zA-Z0-9]+", "_", (value or "").strip().lower())
+        slug = re.sub(r"_+", "_", slug).strip("_")
+        return slug or "ride"
+
+    def _parameter_tuning_csv_path(self) -> Path:
+        project_root = Path(__file__).resolve().parent.parent
+        out_dir = Path(OUTPUT_DIR)
+        if not out_dir.is_absolute():
+            out_dir = project_root / out_dir
+        out_dir.mkdir(parents=True, exist_ok=True)
+        return out_dir / f"parameter_tuning_result_{datetime.now().strftime('%Y-%m-%d_%H-%M-%S')}.csv"
+
+    def _write_parameter_tuning_csv(
+        self,
+        capacity_options: dict[str, list[int]],
+        pass_options: list[tuple[float, float, float]],
+    ) -> Path:
+        """Write all parameter tuning combinations to CSV.
+
+        Columns:
+        run_id, <ride_name>_cap..., fast_pass_weight, normal_weight, single_rider_weight
+        """
+        csv_path = self._parameter_tuning_csv_path()
+
+        # Build deterministic, unique capacity column names based on ride names.
+        used: dict[str, int] = {}
+        ride_cols: list[tuple[str, str]] = []  # (col_name, node_id)
+        for node_id in capacity_options.keys():
+            meta = self.sim.node_data.get(node_id)
+            ride_name = meta.name if isinstance(meta, Ride) else node_id
+            base = f"{self._slugify_column(ride_name)}_cap"
+            count = used.get(base, 0) + 1
+            used[base] = count
+            col = base if count == 1 else f"{base}_{count}"
+            ride_cols.append((col, node_id))
+
+        ride_cols.sort(key=lambda x: x[0])
+        header = [
+            "run_id",
+            *[col for col, _ in ride_cols],
+            "fast_pass_weight",
+            "normal_weight",
+            "single_rider_weight",
+        ]
+
+        run_id = 0
+        with csv_path.open("w", newline="") as f:
+            writer = csv.writer(f)
+            writer.writerow(header)
+
+            # Stream the cartesian product to disk (avoid huge in-memory matrices).
+            for ride_capacities, (fastpass, normal, single_rider) in self.sim.iter_parameter_tuning_configs(
+                CAPACITY_TUNING_STEP,
+                PASS_TYPE_TUNING_STEP,
+            ):
+                run_id += 1
+                row: list[object] = [run_id]
+                for _col, node_id in ride_cols:
+                    row.append(ride_capacities[node_id])
+                row.extend([fastpass, normal, single_rider])
+                writer.writerow(row)
+
+        print(f"- CSV written: {csv_path} ({run_id} rows)")
+        return csv_path
+
     def _setup_parameter_tuning_grid(self) -> None:
         self._stop_current_simulation()
 
@@ -103,8 +175,14 @@ class App:
             else:
                 print(f"  - {ride_name}: (no values)")
         print(f"- Pass step: {PASS_TYPE_TUNING_STEP}")
-        print(f"- Pass combos (F,N,S): {len(pass_options)}")
+        if pass_options:
+            fixed_single = pass_options[0][2]
+            print(f"- Single rider fixed at: {fixed_single:.2f}")
+        print(f"- Pass combos (F,N,S_fixed): {len(pass_options)}")
         print(f"- Total configs (capacity x pass): {total_configs}")
+
+        # Export all combinations to CSV
+        self._write_parameter_tuning_csv(capacity_options, pass_options)
 
     @staticmethod
     def _clamp(value: float, min_value: float, max_value: float) -> float:

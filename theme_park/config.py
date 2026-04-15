@@ -18,7 +18,7 @@ HOVER_BORDER = (30, 30, 30)
 TEXT_COLOR = (25, 25, 25)
 PANEL_BG = (235, 238, 242)
 DEFAULT_AGENT_COLOR = (40, 40, 40)
-DISABLE_GRAPHICS = True  # Set True to disable all graphic updates (for headless/batch runs)
+DISABLE_GRAPHICS = False  # Set True to disable all graphic updates (for headless/batch runs)
 
 # Technical simulation settings
 RANDOM_SEED = 42
@@ -43,9 +43,9 @@ DEFAULT_AGENT_SPEED_M = 1.58  # Meters per second
 DEFAULT_SIMULATION_SPEED = 5000.0  # Initial simulation speed multiplier (1.0x = real-time)
 
 # Global pass ratio targets (add up to 1.0, minimum 0.0)
-GLOBAL_FASTPASS_WEIGHT = 0.05
+GLOBAL_FASTPASS_WEIGHT = 0.20
 GLOBAL_NORMAL_WEIGHT = 0.75 # Cannot be 0 for this
-GLOBAL_SINGLE_RIDER_WEIGHT = 0.20
+GLOBAL_SINGLE_RIDER_WEIGHT = 0.05
 
 # Visitor generation defaults
 # 1) GROUP_SPAWN_PROB determines whether a spawn is group vs individual.
@@ -67,8 +67,9 @@ METRICS_COLLECT_INTERVAL = 1 # Collect metrics every N simulated minutes
 # ================
 # Parameter tuning
 # ================
-CAPACITY_TUNING_STEP = 5
+CAPACITY_TUNING_STEP = 10
 PASS_TYPE_TUNING_STEP = 0.1
+OUTPUT_DIR = "output"
 
 # ==================
 # DO NOT TOUCH BELOW
