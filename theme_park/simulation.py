@@ -298,27 +298,6 @@ class ThemeParkSim:
         self.metrics_total_operation_cost.append(total_operation_cost)
         self.metrics_total_profit.append(total_revenue - total_operation_cost)
 
-    def realtime_kpi_metrics(self) -> tuple[float, float, float]:
-        """Return live KPI values for HUD display.
-
-        Returns:
-            (total_profit, avg_wait_time_minutes, avg_rides_per_rider)
-        """
-        total_profit = sum(
-            meta.total_profit
-            for meta in self.node_data.values()
-            if isinstance(meta, Ride)
-        )
-
-        if self._metrics_departed_agents_count > 0:
-            avg_wait_time = self._metrics_departed_total_queue_time / self._metrics_departed_agents_count
-            avg_rides_per_rider = self._metrics_departed_total_rides_completed / self._metrics_departed_agents_count
-        else:
-            avg_wait_time = 0.0
-            avg_rides_per_rider = 0.0
-
-        return total_profit, avg_wait_time, avg_rides_per_rider
-
     def _add_node(
         self,
         node_id: str,
@@ -677,9 +656,41 @@ class ThemeParkSim:
                 self.graph[u][v]["length"] = edge.length
 
     def output_metrics(self) -> None:
+        summary_rows: list[list[str]] = []
+        total_revenue = 0.0
+        total_operation_cost = 0.0
+        total_cycles = 0
 
-        # Stack key simulation and financial trends.
-        fig, axs = plt.subplots(4, 1, figsize=(12, 11))
+        for node_id, meta in self.node_data.items():
+            if not isinstance(meta, Ride):
+                continue
+
+            total_revenue += meta.total_revenue
+            total_operation_cost += meta.total_operation_cost
+            total_cycles += meta.total_cycles_started
+
+            summary_rows.append([
+                node_id,
+                f"{meta.total_cycles_started:d}",
+                f"{meta.total_revenue:.2f}",
+                f"{meta.total_operation_cost:.2f}",
+                f"{meta.total_profit:.2f}",
+                f"{meta.total_fastpass_customers:d}",
+                f"{meta.total_standard_customers:d}",
+            ])
+
+        summary_rows.append([
+            "TOTAL",
+            f"{total_cycles:d}",
+            f"{total_revenue:.2f}",
+            f"{total_operation_cost:.2f}",
+            f"{(total_revenue - total_operation_cost):.2f}",
+            "-",
+            "-",
+        ])
+
+        # Stack key simulation and financial trends plus a summary table.
+        fig, axs = plt.subplots(5, 1, figsize=(12, 9), gridspec_kw={"height_ratios": [1, 1, 1, 1, 1]})
         axs[0].plot(self.metrics_timesteps, self.metrics_avg_visitor_density, label="Average Visitor Density")
         axs[0].set_xlabel("Time Step")
         axs[0].set_ylabel("Visitor Density (people per unit length)")
@@ -706,34 +717,41 @@ class ThemeParkSim:
         axs[3].set_title("Ride Financial Metrics Over Time")
         axs[3].legend()
         axs[3].grid(True)
+
+        axs[4].axis("off")
+        summary_table = axs[4].table(
+            cellText=summary_rows,
+            colLabels=["Ride", "Cycles", "Revenue", "Op Cost", "Profit", "Fastpass", "Standard"],
+            loc="center",
+            cellLoc="center",
+        )
+        summary_table.auto_set_font_size(False)
+        summary_table.set_fontsize(9)
+        summary_table.scale(1.0, 1.2)
+        axs[4].set_title("Ride Financial Summary")
+
         plt.tight_layout()
         plt.show()
         plt.close()
 
-        total_revenue = 0.0
-        total_operation_cost = 0.0
-        total_cycles = 0
         print("Ride Financial Summary")
         print("-" * 80)
         print(
             f"{'Ride':18s} {'Cycles':>8s} {'Revenue':>12s} {'Op Cost':>12s} {'Profit':>12s} {'Fastpass':>10s} {'Standard':>10s}"
         )
-        for node_id, meta in self.node_data.items():
-            if not isinstance(meta, Ride):
-                continue
-
-            total_revenue += meta.total_revenue
-            total_operation_cost += meta.total_operation_cost
-            total_cycles += meta.total_cycles_started
+        for row in summary_rows[:-1]:
+            ride, cycles, revenue, op_cost, profit, fastpass, standard = row
             print(
-                f"{node_id:18s} {meta.total_cycles_started:8d} {meta.total_revenue:12.2f} "
-                f"{meta.total_operation_cost:12.2f} {meta.total_profit:12.2f} "
-                f"{meta.total_fastpass_customers:10d} {meta.total_standard_customers:10d}"
+                f"{ride:18s} {int(cycles):8d} {float(revenue):12.2f} "
+                f"{float(op_cost):12.2f} {float(profit):12.2f} "
+                f"{int(fastpass):10d} {int(standard):10d}"
             )
 
         print("-" * 80)
+        _total_row = summary_rows[-1]
+        _, total_cycles_str, total_revenue_str, total_op_cost_str, total_profit_str, _, _ = _total_row
         print(
-            f"{'TOTAL':18s} {total_cycles:8d} {total_revenue:12.2f} {total_operation_cost:12.2f} {(total_revenue - total_operation_cost):12.2f}"
+            f"{'TOTAL':18s} {int(total_cycles_str):8d} {float(total_revenue_str):12.2f} {float(total_op_cost_str):12.2f} {float(total_profit_str):12.2f}"
         )
 
     # ==================
