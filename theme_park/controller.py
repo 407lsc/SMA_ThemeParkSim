@@ -277,7 +277,77 @@ class App:
         print(f"- Total configs (capacity x pass): {total_configs}")
 
         # Run all tuning combinations and export per-run results to CSV.
-        self._write_parameter_tuning_csv(capacity_options, pass_options, total_configs)
+        csv_path = self._write_parameter_tuning_csv(capacity_options, pass_options, total_configs)
+
+        # --- Find best result and apply it ---
+        best_row = None
+        best_profit = float('-inf')
+        with csv_path.open("r", newline="") as f:
+            reader = csv.DictReader(f)
+            for row in reader:
+                try:
+                    profit = float(row["final_total_profit"])
+                except Exception:
+                    continue
+                if profit > best_profit:
+                    best_profit = profit
+                    best_row = row
+        if best_row is not None:
+            # Map ride column names to node_ids by ride name
+            ride_col_to_node = {}
+            # Build the same ride_cols as in _write_parameter_tuning_csv
+            used = {}
+            ride_cols = []
+            for node_id in capacity_options.keys():
+                meta = self.sim.node_data.get(node_id)
+                ride_name = meta.name if isinstance(meta, Ride) else node_id
+                base = f"{self._slugify_column(ride_name)}_cap"
+                count = used.get(base, 0) + 1
+                used[base] = count
+                col = base if count == 1 else f"{base}_{count}"
+                ride_cols.append((col, node_id))
+                ride_col_to_node[col] = node_id
+            ride_cols.sort(key=lambda x: x[0])
+
+            # Set ride capacities by matching column name
+            for col, node_id in ride_cols:
+                if col in best_row:
+                    try:
+                        cap = int(best_row[col])
+                    except Exception:
+                        continue
+                    meta = self.sim.node_data.get(node_id)
+                    if isinstance(meta, Ride):
+                        meta.capacity = cap
+            # Set pass weights
+            try:
+                fastpass = float(best_row["fast_pass_weight"])
+                normal = float(best_row["normal_weight"])
+                single_rider = float(best_row["single_rider_weight"])
+                self.sim.set_queue_ratio_weights(fastpass, normal, single_rider)
+            except Exception:
+                pass
+            print(f"\n[Parameter Tuning] Best config applied: profit={best_profit}")
+            # Start a new simulation with these settings
+            self.reset_sim()
+            # Apply again to the new sim instance
+            for col, node_id in ride_cols:
+                if col in best_row:
+                    try:
+                        cap = int(best_row[col])
+                    except Exception:
+                        continue
+                    meta = self.sim.node_data.get(node_id)
+                    if isinstance(meta, Ride):
+                        meta.capacity = cap
+            try:
+                self.sim.set_queue_ratio_weights(fastpass, normal, single_rider)
+            except Exception:
+                pass
+            self.control_panel.sync_from_sim(self.sim, self.simulation_speed)
+            print("[Parameter Tuning] New simulation started with best parameters to maximise profit.")
+        else:
+            print("[Parameter Tuning] No valid results found in CSV.")
 
     @staticmethod
     def _clamp(value: float, min_value: float, max_value: float) -> float:
