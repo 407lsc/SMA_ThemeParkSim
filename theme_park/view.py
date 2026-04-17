@@ -347,6 +347,31 @@ class ParkView:
                 pygame.draw.rect(self.screen, HOVER_BORDER, pygame.Rect(box_x, box_y, box_w, box_h), 1, border_radius=6)
                 draw_multiline(self.screen, agent_info, (box_x + 10, box_y + 10), self.small_font)
 
+        total_profit, avg_wait_time, avg_rides_per_rider = sim.realtime_kpi_metrics()
+        kpi_lines = [
+            f"Total Profits: {total_profit:.2f}",
+            f"Avg Waiting Time: {avg_wait_time:.2f} min",
+            f"Avg Rides per Rider: {avg_rides_per_rider:.2f}",
+        ]
+        kpi_line_height = 22
+        kpi_padding = 8
+        kpi_panel_width = 300
+        kpi_panel_height = kpi_padding * 2 + kpi_line_height * len(kpi_lines)
+        kpi_x, kpi_y = 12, 12
+
+        kpi_surface = pygame.Surface((kpi_panel_width, kpi_panel_height), pygame.SRCALPHA)
+        pygame.draw.rect(kpi_surface, (0, 0, 0, 150), kpi_surface.get_rect(), border_radius=8)
+        self.screen.blit(kpi_surface, (kpi_x, kpi_y))
+
+        for i, line in enumerate(kpi_lines):
+            draw_text(
+                self.screen,
+                line,
+                (kpi_x + kpi_padding, kpi_y + kpi_padding + i * kpi_line_height),
+                self.small_font,
+                color=(245, 245, 245),
+            )
+
         hud_lines = [
             f"Agents: {len(sim.agents)}",
             f"People in park: {sum(a.group_size for a in sim.agents)}",

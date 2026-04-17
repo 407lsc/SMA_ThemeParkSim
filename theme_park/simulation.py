@@ -298,6 +298,27 @@ class ThemeParkSim:
         self.metrics_total_operation_cost.append(total_operation_cost)
         self.metrics_total_profit.append(total_revenue - total_operation_cost)
 
+    def realtime_kpi_metrics(self) -> tuple[float, float, float]:
+        """Return live KPI values for on-screen display.
+
+        Returns:
+            (total_profit, average_wait_time_minutes, average_rides_per_rider)
+        """
+        total_profit = sum(
+            meta.total_profit
+            for meta in self.node_data.values()
+            if isinstance(meta, Ride)
+        )
+
+        if self._metrics_departed_agents_count > 0:
+            avg_wait_time = self._metrics_departed_total_queue_time / self._metrics_departed_agents_count
+            avg_rides_per_rider = self._metrics_departed_total_rides_completed / self._metrics_departed_agents_count
+        else:
+            avg_wait_time = 0.0
+            avg_rides_per_rider = 0.0
+
+        return total_profit, avg_wait_time, avg_rides_per_rider
+
     def _add_node(
         self,
         node_id: str,
