@@ -327,12 +327,15 @@ class ParkView:
 
         if tooltip_node is not None and sim.node_data[tooltip_node].kind == "ride":
             mouse_x, mouse_y = pygame.mouse.get_pos()
-            box_w, box_h = 220, 90
+            ride_info = sim.hovered_info(tooltip_node)
+            line_count = len(ride_info.splitlines())
+            box_w = 230  # width of box
+            box_h = max(110, line_count * 20) # height of box based on text lines
             box_x = min(mouse_x + 15, SIM_W - box_w - 10)
             box_y = min(mouse_y + 15, HEIGHT - box_h - 10)
             pygame.draw.rect(self.screen, HOVER_PANEL_BG, pygame.Rect(box_x, box_y, box_w, box_h), border_radius=6)
             pygame.draw.rect(self.screen, HOVER_BORDER, pygame.Rect(box_x, box_y, box_w, box_h), 1, border_radius=6)
-            draw_multiline(self.screen, sim.hovered_info(tooltip_node), (box_x + 10, box_y + 10), self.small_font)
+            draw_multiline(self.screen, ride_info, (box_x + 10, box_y + 10), self.small_font)
         else:
             hovered_agent = sim.agent_at_position(mouse_pos)
             if hovered_agent is not None:
