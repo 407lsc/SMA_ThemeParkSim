@@ -298,6 +298,27 @@ class ThemeParkSim:
         self.metrics_total_operation_cost.append(total_operation_cost)
         self.metrics_total_profit.append(total_revenue - total_operation_cost)
 
+    def realtime_kpi_metrics(self) -> tuple[float, float, float]:
+        """Return live KPI values for HUD display.
+
+        Returns:
+            (total_profit, avg_wait_time_minutes, avg_rides_per_rider)
+        """
+        total_profit = sum(
+            meta.total_profit
+            for meta in self.node_data.values()
+            if isinstance(meta, Ride)
+        )
+
+        if self._metrics_departed_agents_count > 0:
+            avg_wait_time = self._metrics_departed_total_queue_time / self._metrics_departed_agents_count
+            avg_rides_per_rider = self._metrics_departed_total_rides_completed / self._metrics_departed_agents_count
+        else:
+            avg_wait_time = 0.0
+            avg_rides_per_rider = 0.0
+
+        return total_profit, avg_wait_time, avg_rides_per_rider
+
     def _add_node(
         self,
         node_id: str,
@@ -359,8 +380,8 @@ class ThemeParkSim:
         self._add_node("n3", 484, 724, "intersection", "")
         self._add_node("n4", 744, 539, "intersection", "")
         self._add_node("n5", 598, 445, "intersection", "")
-        self._add_node("ride1", 874, 381, "ride", "Log Flume", max_capacity=30, capacity=30, image_path="inputs/Log_flume.png",ride_duration_steps=3,min_occupancy_ratio=0.80)
-        self._add_node("ride2", 496, 373, "ride", "Ferris Wheel", max_capacity=100, capacity=75, image_path = "inputs/Ferris_wheel.png", ride_duration_steps=5,min_occupancy_ratio=0.80)
+        self._add_node("ride1", 874, 381, "ride", "Log Flume", max_capacity=30, capacity=10, image_path="inputs/Log_flume.png",ride_duration_steps=3,min_occupancy_ratio=0.80)
+        self._add_node("ride2", 496, 373, "ride", "Ferris Wheel", max_capacity=100, capacity=10, image_path = "inputs/Ferris_wheel.png", ride_duration_steps=5,min_occupancy_ratio=0.80)
         self._add_node("ride3", 562, 662, "ride", "Roller Coaster", max_capacity=30, capacity=30, image_path = "inputs/roller_coaster.png", ride_duration_steps=3, min_occupancy_ratio=0.80)
         self._add_node("n6", 854, 271, "intersection", "")
         self._add_node("n7", 932, 324, "intersection", "")

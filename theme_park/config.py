@@ -43,8 +43,8 @@ DEFAULT_AGENT_SPEED_M = 1.58  # Meters per second
 DEFAULT_SIMULATION_SPEED = 5000.0  # Initial simulation speed multiplier (1.0x = real-time)
 
 # Global pass ratio targets (add up to 1.0, minimum 0.0)
-GLOBAL_FASTPASS_WEIGHT = 0.20
-GLOBAL_NORMAL_WEIGHT = 0.75 # Cannot be 0 for this
+GLOBAL_FASTPASS_WEIGHT = 0.5
+GLOBAL_NORMAL_WEIGHT = 0.45 # Cannot be 0 for this
 GLOBAL_SINGLE_RIDER_WEIGHT = 0.05
 
 # Visitor generation defaults

@@ -273,6 +273,29 @@ class ParkView:
             self.screen.blit(backdrop_surface, backdrop_rect.topleft)
             self.screen.blit(closed_text, closed_rect)
 
+        total_profit, avg_wait_time, avg_rides_per_rider = sim.realtime_kpi_metrics()
+        kpi_lines = [
+            f"Total Profits: {total_profit:.2f}",
+            f"Avg Waiting Time: {avg_wait_time:.2f} min",
+            f"Avg Rides per Rider: {avg_rides_per_rider:.2f}",
+        ]
+        kpi_line_height = 22
+        kpi_panel_padding = 8
+        kpi_panel_w = 300
+        kpi_panel_h = kpi_panel_padding * 2 + kpi_line_height * len(kpi_lines)
+        kpi_panel_x, kpi_panel_y = 12, 12
+        kpi_surface = pygame.Surface((kpi_panel_w, kpi_panel_h), pygame.SRCALPHA)
+        pygame.draw.rect(kpi_surface, (0, 0, 0, 150), kpi_surface.get_rect(), border_radius=8)
+        self.screen.blit(kpi_surface, (kpi_panel_x, kpi_panel_y))
+        for i, line in enumerate(kpi_lines):
+            draw_text(
+                self.screen,
+                line,
+                (kpi_panel_x + kpi_panel_padding, kpi_panel_y + kpi_panel_padding + i * kpi_line_height),
+                self.small_font,
+                color=(245, 245, 245),
+            )
+
         for u, v in sim.graph.edges():
             x1, y1 = sim.positions[u]
             x2, y2 = sim.positions[v]
@@ -348,13 +371,9 @@ class ParkView:
                 draw_multiline(self.screen, agent_info, (box_x + 10, box_y + 10), self.small_font)
 
         hud_lines = [
-            f"Agents: {len(sim.agents)}",
             f"People in park: {sum(a.group_size for a in sim.agents)}",
             f"Total entered: {sim.total_entered}",
             f"Total exited: {sim.total_exited}",
-            f"Sim speed: {simulation_speed:.1f}x",
-            f"Current step: {sim.current_time_step}",
-            f"Elapsed sim time: {sim.elapsed_sim_time:.1f} min",
             f"Cursor: ({mouse_pos[0]}, {mouse_pos[1]})",
         ]
         line_height = 24
