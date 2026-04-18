@@ -1,0 +1,12 @@
+node_id,x,y,kind,name,max_capacity,capacity,color,radius,image_path,ride_duration_steps,min_occupancy_ratio,operation_cost_base_per_cycle,operation_cost_per_capacity_unit,fastpass_price_per_ride,standard_price_per_ride
+entrance,120,360,intersection,"",,,,,,,,
+n1,312,490,intersection,"",,,,,,,,
+n2,227,550,intersection,"",,,,,,,,
+n3,484,724,intersection,"",,,,,,,,
+n4,744,539,intersection,"",,,,,,,,
+n5,598,445,intersection,"",,,,,,,,
+ride1,874,381,ride,"Log Flume",30,10,,,inputs/Log_flume.png,3,0.80,,,
+ride2,496,373,ride,"Ferris Wheel",100,10,,,inputs/Ferris_wheel.png,5,0.80,,,
+ride3,562,662,ride,"Roller Coaster",30,30,,,inputs/roller_coaster.png,3,0.80,,,
+n6,854,271,intersection,"",,,,,,,,
+n7,932,324,intersection,"",,,,,,,,

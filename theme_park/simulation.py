@@ -5,7 +5,8 @@ import random
 import matplotlib.pyplot as plt
 from itertools import product
 from typing import Dict, List, Optional, Tuple
-
+import csv
+from pathlib import Path
 import networkx as nx
 
 from .config import (
@@ -374,38 +375,80 @@ class ThemeParkSim:
         self.node_data[node_id] = node
 
     def _build_park(self) -> None:
-        self._add_node("entrance", 120, 360, "intersection", "")
-        self._add_node("n1", 312, 490, "intersection", "")
-        self._add_node("n2", 227, 550, "intersection", "")
-        self._add_node("n3", 484, 724, "intersection", "")
-        self._add_node("n4", 744, 539, "intersection", "")
-        self._add_node("n5", 598, 445, "intersection", "")
-        self._add_node("ride1", 874, 381, "ride", "Log Flume", max_capacity=30, capacity=10, image_path="inputs/Log_flume.png",ride_duration_steps=3,min_occupancy_ratio=0.80)
-        self._add_node("ride2", 496, 373, "ride", "Ferris Wheel", max_capacity=100, capacity=10, image_path = "inputs/Ferris_wheel.png", ride_duration_steps=5,min_occupancy_ratio=0.80)
-        self._add_node("ride3", 562, 662, "ride", "Roller Coaster", max_capacity=30, capacity=30, image_path = "inputs/roller_coaster.png", ride_duration_steps=3, min_occupancy_ratio=0.80)
-        self._add_node("n6", 854, 271, "intersection", "")
-        self._add_node("n7", 932, 324, "intersection", "")
+        nodes_path = Path("inputs/nodes.csv")
+        edges_path = Path("inputs/edges.csv")
 
-        edges = [
-            ("entrance", "n1"),
-            ("n1", "n2"),
-            ("n1", "ride2"),
-            ("n2", "n3"),
-            ("n3", "ride3"),
-            ("n4", "ride3"),
-            ("n4", "n5"),
-            ("n5", "ride2"),
-            ("n5", "n6"),
-            ("n6", "n7"),
-            ("n7", "ride1")
-        ]
-        for u, v in edges:
-            x1, y1 = self.positions[u]
-            x2, y2 = self.positions[v]
-            length = math.dist((x1, y1), (x2, y2))
-            edge = EdgeData(u=u, v=v, length=length)
-            self.edge_data[edge.key] = edge
-            self.graph.add_edge(u, v, length=edge.length, crowd=edge.crowd)
+        # Load nodes from csv file
+        with nodes_path.open("r", newline="") as f:
+            reader = csv.DictReader(f)
+            for row in reader:
+                # Convert types as needed, handle missing/empty fields
+                node_id = row["node_id"]
+                x = float(row["x"])
+                y = float(row["y"])
+                kind = row["kind"]
+                name = row["name"]
+                # Optional fields with defaults
+                def parse_int(val, default=0):
+                    try:
+                        return int(val) if val else default
+                    except Exception:
+                        return default
+                def parse_float(val, default=0.0):
+                    try:
+                        return float(val) if val else default
+                    except Exception:
+                        return default
+                def parse_tuple(val):
+                    if val:
+                        try:
+                            return tuple(map(int, val.strip("()[]").split(',')))
+                        except Exception:
+                            return None
+                    return None
+                max_capacity = parse_int(row.get("max_capacity", 30), 30)
+                capacity = parse_int(row.get("capacity", 0), 0)
+                color = parse_tuple(row.get("color", None))
+                radius = parse_int(row.get("radius", 0), None) if row.get("radius") else None
+                image_path = row.get("image_path") or None
+                ride_duration_steps = parse_int(row.get("ride_duration_steps", 60), 60)
+                min_occupancy_ratio = parse_float(row.get("min_occupancy_ratio", 0.80), 0.80)
+                operation_cost_base_per_cycle = parse_float(row.get("operation_cost_base_per_cycle")) if row.get("operation_cost_base_per_cycle") else None
+                operation_cost_per_capacity_unit = parse_float(row.get("operation_cost_per_capacity_unit")) if row.get("operation_cost_per_capacity_unit") else None
+                fastpass_price_per_ride = parse_float(row.get("fastpass_price_per_ride")) if row.get("fastpass_price_per_ride") else None
+                standard_price_per_ride = parse_float(row.get("standard_price_per_ride")) if row.get("standard_price_per_ride") else None
+
+                self._add_node(
+                    node_id,
+                    x,
+                    y,
+                    kind,
+                    name,
+                    max_capacity,
+                    capacity,
+                    color,
+                    radius,
+                    image_path,
+                    ride_duration_steps,
+                    min_occupancy_ratio,
+                    operation_cost_base_per_cycle,
+                    operation_cost_per_capacity_unit,
+                    fastpass_price_per_ride,
+                    standard_price_per_ride,
+                )
+
+        # Load edges from csv file
+        with edges_path.open("r", newline="") as f:
+            reader = csv.DictReader(f)
+            for row in reader:
+                u = row["source"]
+                v = row["target"]
+                x1, y1 = self.positions[u]
+                x2, y2 = self.positions[v]
+                length = math.dist((x1, y1), (x2, y2))
+                edge = EdgeData(u=u, v=v, length=length)
+                self.edge_data[edge.key] = edge
+                self.graph.add_edge(u, v, length=edge.length, crowd=edge.crowd)
 
 
     # Agent runtime API (consumed by Agent in models.py via AgentRuntime):
