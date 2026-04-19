@@ -291,7 +291,7 @@ class Ride(NodeData):
         self.total_revenue += cycle_revenue
         self.total_operation_cost += self.operation_cost_per_cycle
 
-    def process_queues(self, current_time_minutes: float, park_is_closing: bool = False) -> None:
+    def execute_step(self, current_time_minutes: float, park_is_closing: bool = False) -> None:
         # If a ride is already running, let it finish.
         if self._ride_end_time is not None:
             if current_time_minutes < self._ride_end_time:
@@ -532,12 +532,14 @@ class Agent:
         elapsed_minutes = max(dt, 0.0) / 60.0
         self.time_in_park += elapsed_minutes
 
+        # Check if it is time to start exiting
         if (
             not self.is_exiting
             and self.time_in_park >= self.planned_departure_time
         ):
             self._start_exit(runtime)
 
+        # Depending on the current state, execute different logic.
         if self.state == "stationary":
             self._execute_stationary(runtime)
             return

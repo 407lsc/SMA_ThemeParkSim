@@ -547,7 +547,7 @@ class ThemeParkSim:
 
         for meta in self.node_data.values():
             if isinstance(meta, Ride):
-                meta.process_queues(self.current_time_minutes, self.park_is_closing)
+                meta.execute_step(self.current_time_minutes, self.park_is_closing)
 
         # Do not admit new agents after closing starts
         if not self.park_is_closing:
