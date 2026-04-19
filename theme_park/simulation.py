@@ -113,20 +113,6 @@ class ThemeParkSim:
     def initialise(self) -> None:
         self._build_park()
 
-    def execute_step(self, dt: float) -> None:
-        dt_sim_seconds = max(dt, 0.0)
-
-        for meta in self.node_data.values():
-            if isinstance(meta, Ride):
-                meta.process_queues(self.current_time_minutes, self.park_is_closing)
-
-        # Do not admit new agents after closing starts
-        if not self.park_is_closing:
-            # Convert per-sim-second spawn chance to this step's duration.
-            spawn_prob_this_step = 1.0 - (1.0 - self.agent_spawn_prob_per_sim_second) ** dt_sim_seconds
-            if random.random() < spawn_prob_this_step:
-                self.add_agent()
-
     def _random_visitor_type(self) -> str:
         # Choose individual visitor type only (group handled separately).
         return random.choices(
@@ -557,7 +543,18 @@ class ThemeParkSim:
         if self.current_time_minutes >= self.park_close_time:
             self._begin_park_closing()
 
-        self.execute_step(dt)
+        dt_sim_seconds = max(dt, 0.0)
+
+        for meta in self.node_data.values():
+            if isinstance(meta, Ride):
+                meta.process_queues(self.current_time_minutes, self.park_is_closing)
+
+        # Do not admit new agents after closing starts
+        if not self.park_is_closing:
+            # Convert per-sim-second spawn chance to this step's duration.
+            spawn_prob_this_step = 1.0 - (1.0 - self.agent_spawn_prob_per_sim_second) ** dt_sim_seconds
+            if random.random() < spawn_prob_this_step:
+                self.add_agent()
 
         for agent in list(self.agents):
             agent.execute_step(dt, self)
@@ -571,12 +568,13 @@ class ThemeParkSim:
         self.agents = [agent for agent in self.agents if not agent.has_left_park]
         self.agent_count = len(self.agents)
 
-        # Auto-stop once closing has started and everyone has exited.
+        # Auto-stop once closing has started and everyone has exited
         if self.park_is_closing and self.agent_count == 0:
             self.paused = True
             if self.enable_final_output_metrics:
                 self.output_metrics()
 
+        # Collect metrics snapshot at configured intervals
         self._metrics_minutes_since_last_collect += elapsed_minutes
         while self._metrics_minutes_since_last_collect >= self.metrics_collect_interval_s:
             self._collect_metrics_snapshot()
