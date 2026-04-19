@@ -531,7 +531,7 @@ class ThemeParkSim:
     def node_data_for(self, node_id: str) -> NodeData:
         return self.node_data[node_id]
 
-    def step(self, dt: float) -> None:
+    def execute_step(self, dt: float) -> None:
         if self.paused:
             return
 

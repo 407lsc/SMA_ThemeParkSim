@@ -183,7 +183,7 @@ class App:
 
             inner_step_count = 0
             while not run_sim.paused:
-                run_sim.step(simulated_seconds_per_step)
+                run_sim.execute_step(simulated_seconds_per_step)
                 inner_step_count += 1
 
                 # Keep OS window/event loop responsive during long headless runs.
@@ -556,7 +556,7 @@ class App:
                     micro_steps = self._compute_micro_steps(fixed_dt)
                     micro_dt = fixed_dt / micro_steps
                     for _ in range(micro_steps):
-                        self.sim.step(micro_dt)
+                        self.sim.execute_step(micro_dt)
 
         self.mouse_pos = pygame.mouse.get_pos()
         if self.mouse_pos[0] < SIM_W:
