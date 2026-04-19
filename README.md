@@ -9,30 +9,50 @@ The model combines an Agent-Based Model (ABM) and Discrete Event Simulation (DES
 
 The DES component models the internal operation of rides, including visitor arrivals, queue selection (e.g., general, Fast Pass, or single rider), loading and unloading processes with priority handling, and ride cycle completion.
 
+
 ## Requirements
 
 - Python 3.11 (tested to work on this version)
 - pip
 
-## Setup and Run using Virtual Environment
+## Quick Start (All Platforms)
 
-### macOS
 
-```bash
-python3.11 -m venv .venv
-source .venv/bin/activate
-pip install -r requirements.txt
-python app.py
-```
+1. **(Recommended) Create and activate a virtual environment:**
+	 - **macOS/Linux:**
+		 ```bash
+		 python3.11 -m venv .venv
+		 source .venv/bin/activate
+		 ```
+	 - **Windows (PowerShell):**
+		 ```powershell
+		 py -3.11 -m venv .venv
+		 .\.venv\Scripts\Activate.ps1
+		 ```
+		 If you see an execution policy error, run one of these in PowerShell first:
+		 ```powershell
+		 Set-ExecutionPolicy -Scope Process -ExecutionPolicy RemoteSigned
+		 ```
+	 - **Windows (Command Prompt):**
+		 ```cmd
+		 py -3.11 -m venv .venv
+		 .venv\Scripts\activate
+		 ```
 
-### Windows (PowerShell)
+	 > **Note:** Using a virtual environment is highly recommended to avoid dependency conflicts. If you do not wish to use one, skip this step.
 
-```powershell
-py -3.11 -m venv .venv
-.\.venv\Scripts\Activate.ps1
-pip install -r requirements.txt
-python app.py
-```
+2. **Install dependencies:**
+	 ```bash
+	 pip install -r requirements.txt
+	 ```
+
+3. **Run the application:**
+	 ```bash
+	 python app.py
+	 ```
+
+
+
 
 ## Documentation
 
